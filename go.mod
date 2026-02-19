@@ -1,8 +1,6 @@
 module github.com/fingerprintjs/fingerprint-mcp-server
 
-go 1.23.0
-
-toolchain go1.23.5
+go 1.25.7
 
 require (
 	github.com/alexflint/go-arg v1.6.1

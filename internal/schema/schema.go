@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"encoding/json"
@@ -7,19 +7,20 @@ import (
 	"strings"
 
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
-// schemaFromStruct generates a JSON Schema from a struct using reflection.
+// SchemaFromStruct generates a JSON Schema from a struct using reflection.
 // Fields with `ref` tag use $ref to OpenAPI definitions.
 // Fields with `description` tag get that description.
 // The json tag determines property names; omitempty means not required.
-func schemaFromStruct(v any) json.RawMessage {
+func SchemaFromStruct(v any) json.RawMessage {
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
-		panic("schemaFromStruct requires a struct type")
+		panic("SchemaFromStruct requires a struct type")
 	}
 
 	var defs map[string]any
@@ -81,17 +82,17 @@ func schemaFromStruct(v any) json.RawMessage {
 	return b
 }
 
-// patchProductsEnum injects an "items.enum" constraint into the "products" property
+// PatchProductsEnum injects an "items.enum" constraint into the "products" property
 // of the given JSON Schema. It returns the patched schema.
-func patchProductsEnum(schema json.RawMessage) json.RawMessage {
+func PatchProductsEnum(schema json.RawMessage) json.RawMessage {
 	var s map[string]any
 	if err := json.Unmarshal(schema, &s); err != nil {
-		panic(fmt.Sprintf("patchProductsEnum: unmarshal: %v", err))
+		panic(fmt.Sprintf("PatchProductsEnum: unmarshal: %v", err))
 	}
 
 	var fields []any
 	if err := json.Unmarshal(productsFields, &fields); err != nil {
-		panic(fmt.Sprintf("patchProductsEnum: unmarshal productsFields: %v", err))
+		panic(fmt.Sprintf("PatchProductsEnum: unmarshal productsFields: %v", err))
 	}
 
 	props, ok := s["properties"].(map[string]any)
@@ -110,15 +111,15 @@ func patchProductsEnum(schema json.RawMessage) json.RawMessage {
 
 	b, err := json.Marshal(s)
 	if err != nil {
-		panic(fmt.Sprintf("patchProductsEnum: marshal: %v", err))
+		panic(fmt.Sprintf("PatchProductsEnum: marshal: %v", err))
 	}
 	return b
 }
 
-// filterProducts nils out fields on the Products struct that are not in the
+// FilterProducts nils out fields on the Products struct that are not in the
 // requested set. Since all Products fields are pointers tagged with omitempty,
 // nilled fields are omitted from the JSON output automatically.
-func filterProducts(p *sdk.Products, fields []string) {
+func FilterProducts(p *sdk.Products, fields []string) {
 	if p == nil || len(fields) == 0 {
 		return
 	}
@@ -156,4 +157,33 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 	default:
 		return "object"
 	}
+}
+
+// SearchEventInputToOpts copies matching fields from SearchEventInput to
+// sdk.FingerprintApiSearchEventsOpts using reflection. Fields like Limit and
+// Products that exist only in SearchEventInput are skipped automatically.
+func SearchEventInputToOpts(input *SearchEventInput) *sdk.FingerprintApiSearchEventsOpts {
+	opts := &sdk.FingerprintApiSearchEventsOpts{}
+	src := reflect.ValueOf(input).Elem()
+	dst := reflect.ValueOf(opts).Elem()
+	for i := 0; i < dst.NumField(); i++ {
+		name := dst.Type().Field(i).Name
+		srcField := src.FieldByName(name)
+		if srcField.IsValid() && srcField.Type().AssignableTo(dst.Field(i).Type()) {
+			dst.Field(i).Set(srcField)
+		}
+	}
+	return opts
+}
+
+func MustInferSchema[T any]() json.RawMessage {
+	s, err := jsonschema.For[T](&jsonschema.ForOptions{IgnoreInvalidTypes: true})
+	if err != nil {
+		panic(fmt.Sprintf("inferring schema: %v", err))
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		panic(fmt.Sprintf("marshaling schema: %v", err))
+	}
+	return b
 }

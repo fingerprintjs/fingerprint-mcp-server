@@ -1,10 +1,11 @@
-package main
+package fpmcpserver
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/yosida95/uritemplate/v3"
@@ -30,14 +31,16 @@ func (a *App) registerEventResource(_ context.Context) error {
 			// this should never happen because we can only get here if uri matches the template
 			return nil, fmt.Errorf("could not parse resource uri")
 		}
-		fpSDKCtx := context.WithValue(
-			ctx,
-			sdk.ContextAPIKey,
-			sdk.APIKey{Key: a.config.APIKey},
-		)
+
+		var fpClient *sdk.APIClient
+		var fpSDKCtx context.Context
+		var err error
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, request.Extra.Header); err != nil {
+			return nil, err
+		}
 
 		// Call Fingerprint API
-		event, _, fpErr := a.fpClient.FingerprintApi.GetEvent(fpSDKCtx, uriValues.Get("event_id").String())
+		event, _, fpErr := fpClient.FingerprintApi.GetEvent(fpSDKCtx, uriValues.Get("event_id").String())
 		if fpErr != nil {
 			return nil, fmt.Errorf("failed to get event: %w", fpErr)
 		}
@@ -60,8 +63,57 @@ func (a *App) registerEventResource(_ context.Context) error {
 
 	return nil
 }
+
+func (a *App) registerEnvironmentSchemaResource(_ context.Context) error {
+	content := schema.MustInferSchema[CreateEnvironmentOutput]()
+
+	a.server.AddResource(&mcp.Resource{
+		Description: "JSON Schema for environment objects returned by environment management tools",
+		MIMEType:    "application/schema+json",
+		Name:        "environment_schema",
+		Title:       "Environment JSON Schema",
+		URI:         "fingerprint://schemas/environment",
+	}, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      request.Params.URI,
+					MIMEType: "application/schema+json",
+					Text:     string(content),
+				},
+			},
+		}, nil
+	})
+
+	return nil
+}
+
+func (a *App) registerAPIKeySchemaResource(_ context.Context) error {
+	content := schema.MustInferSchema[GetAPIKeyOutput]()
+
+	a.server.AddResource(&mcp.Resource{
+		Description: "JSON Schema for API key objects returned by API key management tools",
+		MIMEType:    "application/schema+json",
+		Name:        "api_key_schema",
+		Title:       "API Key JSON Schema",
+		URI:         "fingerprint://schemas/api-key",
+	}, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      request.Params.URI,
+					MIMEType: "application/schema+json",
+					Text:     string(content),
+				},
+			},
+		}, nil
+	})
+
+	return nil
+}
+
 func (a *App) registerEventSchemaResource(_ context.Context) error {
-	schema := schemaFromStruct(GetEventOutput{})
+	content := schema.SchemaFromStruct(GetEventOutput{})
 
 	a.server.AddResource(&mcp.Resource{
 		Description: "JSON Schema for identification events",
@@ -75,7 +127,7 @@ func (a *App) registerEventSchemaResource(_ context.Context) error {
 				{
 					URI:      request.Params.URI,
 					MIMEType: "application/schema+json",
-					Text:     string(schema),
+					Text:     string(content),
 				},
 			},
 		}, nil

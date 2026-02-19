@@ -1,9 +1,10 @@
-package main
+package fpmcpserver
 
 import (
 	"reflect"
 	"testing"
 
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
 )
 
@@ -16,7 +17,7 @@ var inputOnlyFields = map[string]bool{
 
 // Catches SDK adding a new field that our generated SearchEventInput doesn't have yet.
 func TestSearchEventInputToOpts_AllOptsFieldsHaveMatchingInputField(t *testing.T) {
-	inputType := reflect.TypeOf(SearchEventInput{})
+	inputType := reflect.TypeOf(schema.SearchEventInput{})
 	optsType := reflect.TypeOf(sdk.FingerprintApiSearchEventsOpts{})
 
 	for i := 0; i < optsType.NumField(); i++ {
@@ -35,7 +36,7 @@ func TestSearchEventInputToOpts_AllOptsFieldsHaveMatchingInputField(t *testing.T
 
 // Catches the OpenAPI spec adding a field that the SDK doesn't support, or a typo in the generated name.
 func TestSearchEventInputToOpts_AllInputFieldsMapped(t *testing.T) {
-	inputType := reflect.TypeOf(SearchEventInput{})
+	inputType := reflect.TypeOf(schema.SearchEventInput{})
 	optsType := reflect.TypeOf(sdk.FingerprintApiSearchEventsOpts{})
 
 	for i := 0; i < inputType.NumField(); i++ {
@@ -52,14 +53,14 @@ func TestSearchEventInputToOpts_AllInputFieldsMapped(t *testing.T) {
 // Verifies the reflection-based copier actually transfers every value, not just that fields exist.
 func TestSearchEventInputToOpts_CopiesAllValues(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.
-	input := SearchEventInput{}
+	input := schema.SearchEventInput{}
 	inputVal := reflect.ValueOf(&input).Elem()
 	for i := 0; i < inputVal.NumField(); i++ {
 		field := inputVal.Field(i)
 		setNonZero(t, inputVal.Type().Field(i).Name, field)
 	}
 
-	opts := searchEventInputToOpts(&input)
+	opts := schema.SearchEventInputToOpts(&input)
 
 	// Verify every opts field received a non-zero value.
 	optsVal := reflect.ValueOf(opts).Elem()
@@ -73,7 +74,7 @@ func TestSearchEventInputToOpts_CopiesAllValues(t *testing.T) {
 	}
 }
 
-// setNonZero sets a reflect.Value to a non-zero value based on its type.
+// setNonZero sets a `reflect.Value` to a non-zero value based on its type.
 func setNonZero(t *testing.T, name string, v reflect.Value) {
 	t.Helper()
 	switch v.Kind() {

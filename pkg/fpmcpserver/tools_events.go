@@ -1,11 +1,12 @@
-package main
+package fpmcpserver
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
+	"net/http"
 
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -26,31 +27,79 @@ type SearchEventsOutput struct {
 	Events sdk.SearchEventsResponse `json:"events" ref:"SearchEventsResponse"`
 }
 
+const headerServerApiKey = "X-Fingerprint-Server-Api-Key"
+const headerServerApiRegion = "X-Fingerprint-Server-Api-Region"
+
+func (a *App) requireServerApiClient(ctx context.Context, header http.Header) (*sdk.APIClient, context.Context, error) {
+	var apiKey string
+	if a.cfg.PublicMode {
+		apiKey = header.Get(headerServerApiKey)
+	} else {
+		apiKey = a.cfg.ServerAPIKey
+	}
+	if apiKey == "" {
+		return nil, nil, errors.New("server API key is required")
+	}
+
+	var region string
+	if a.cfg.PublicMode {
+		region = header.Get(headerServerApiRegion)
+	} else {
+		region = a.cfg.Region
+	}
+	if region == "" {
+		return nil, nil, errors.New("server API region is required")
+	}
+
+	// Initialize Fingerprint SDK client
+	fpSDKConfig := sdk.NewConfiguration()
+
+	// Set region based on configuration
+	switch region {
+	case "eu":
+		fpSDKConfig.ChangeRegion(sdk.RegionEU)
+	case "asia":
+		fpSDKConfig.ChangeRegion(sdk.RegionAsia)
+	case "us":
+		fpSDKConfig.ChangeRegion(sdk.RegionUS)
+	default:
+		return nil, nil, fmt.Errorf("unknown region %s, must be one of: us, eu, asia", a.cfg.Region)
+	}
+
+	fpSDKCtx := context.WithValue(
+		ctx,
+		sdk.ContextAPIKey,
+		sdk.APIKey{Key: apiKey},
+	)
+
+	return sdk.NewAPIClient(fpSDKConfig), fpSDKCtx, nil
+}
+
 func (a *App) registerGetEventTool(_ context.Context) error {
 	// Register the get_event tool
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "get_event",
 		Description:  "Retrieves detailed information about a specific identification event from Fingerprint using its event_id. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
-		OutputSchema: schemaFromStruct(GetEventOutput{}),
-		InputSchema:  patchProductsEnum(schemaFromStruct(GetEventInput{})),
+		OutputSchema: schema.SchemaFromStruct(GetEventOutput{}),
+		InputSchema:  schema.PatchProductsEnum(schema.SchemaFromStruct(GetEventInput{})),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetEventInput) (*mcp.CallToolResult, *GetEventOutput, error) {
+		var fpClient *sdk.APIClient
+		var fpSDKCtx context.Context
+		var err error
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra.Header); err != nil {
+			return nil, nil, err
+		}
 		if input.EventID == "" {
 			return nil, nil, errors.New("event_id is required")
 		}
 
-		fpSDKCtx := context.WithValue(
-			ctx,
-			sdk.ContextAPIKey,
-			sdk.APIKey{Key: a.config.APIKey},
-		)
-
 		// Call Fingerprint API
-		event, _, err := a.fpClient.FingerprintApi.GetEvent(fpSDKCtx, input.EventID)
+		event, _, err := fpClient.FingerprintApi.GetEvent(fpSDKCtx, input.EventID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get event: %w", err)
 		}
 
-		filterProducts(event.Products, input.Products)
+		schema.FilterProducts(event.Products, input.Products)
 
 		return nil, &GetEventOutput{Event: event}, nil
 	})
@@ -63,14 +112,15 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "search_events",
 		Description:  "Retrieves detailed information about events matching provided criteria. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
-		OutputSchema: schemaFromStruct(SearchEventsOutput{}),
-		InputSchema:  patchProductsEnum(searchEventsInputSchema),
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchEventInput) (*mcp.CallToolResult, *SearchEventsOutput, error) {
-		fpSDKCtx := context.WithValue(
-			ctx,
-			sdk.ContextAPIKey,
-			sdk.APIKey{Key: a.config.APIKey},
-		)
+		OutputSchema: schema.SchemaFromStruct(SearchEventsOutput{}),
+		InputSchema:  schema.PatchProductsEnum(schema.SearchEventsInputSchema),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input schema.SearchEventInput) (*mcp.CallToolResult, *SearchEventsOutput, error) {
+		var fpClient *sdk.APIClient
+		var fpSDKCtx context.Context
+		var err error
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra.Header); err != nil {
+			return nil, nil, err
+		}
 
 		limit := input.Limit
 		if limit == 0 {
@@ -78,34 +128,17 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		}
 
 		// Call Fingerprint API
-		events, _, err := a.fpClient.FingerprintApi.SearchEvents(fpSDKCtx, int32(limit), searchEventInputToOpts(&input))
+		events, _, err := fpClient.FingerprintApi.SearchEvents(fpSDKCtx, int32(limit), schema.SearchEventInputToOpts(&input))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to search events: %w", err)
 		}
 
 		for i := range events.Events {
-			filterProducts(events.Events[i].Products, input.Products)
+			schema.FilterProducts(events.Events[i].Products, input.Products)
 		}
 
 		return nil, &SearchEventsOutput{Events: events}, nil
 	})
 
 	return nil
-}
-
-// searchEventInputToOpts copies matching fields from SearchEventInput to
-// sdk.FingerprintApiSearchEventsOpts using reflection. Fields like Limit and
-// Products that exist only in SearchEventInput are skipped automatically.
-func searchEventInputToOpts(input *SearchEventInput) *sdk.FingerprintApiSearchEventsOpts {
-	opts := &sdk.FingerprintApiSearchEventsOpts{}
-	src := reflect.ValueOf(input).Elem()
-	dst := reflect.ValueOf(opts).Elem()
-	for i := 0; i < dst.NumField(); i++ {
-		name := dst.Type().Field(i).Name
-		srcField := src.FieldByName(name)
-		if srcField.IsValid() && srcField.Type().AssignableTo(dst.Field(i).Type()) {
-			dst.Field(i).Set(srcField)
-		}
-	}
-	return opts
 }
