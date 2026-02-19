@@ -4,9 +4,13 @@ An MCP (Model Context Protocol) server for [Fingerprint](https://fingerprint.com
 
 ## Features
 
-- **get_event** tool: Retrieves detailed information about a specific identification event by its event ID.
-- **search_events** tool: Searches for events matching various criteria (visitor ID, IP address, bot detection, smart signals, etc.) with pagination support.
-- Supports both **stdio** and **SSE** transport protocols
+- **Event tools**: Retrieve and search identification events with full smart signal data
+- **Management tools**: Manage workspace environments and API keys
+- **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
+- Supports both **stdio** and **streamable-http** transports
+- Optional HTTPS with TLS certificates
+- **Public mode** for multi-tenant deployments (API keys passed via HTTP headers)
+- **Read-only mode** to expose only read tools
 - Configurable via environment variables or CLI flags
 - Docker support for easy deployment
 
@@ -27,7 +31,7 @@ go generate ./...
 go build -o fingerprint-mcp-server .
 ```
 
-`go generate` downloads the OpenAPI spec and generates `schema_generated.go` and supporting JSON files. These are gitignored and must be regenerated before building.
+`go generate` downloads the OpenAPI spec and generates schema files under `internal/schema/`. These are gitignored and must be regenerated before building.
 
 ## Configuration
 
@@ -35,32 +39,43 @@ The server can be configured via CLI flags or environment variables:
 
 | CLI Flag | Environment Variable | Default | Description |
 |----------|---------------------|---------|-------------|
-| `--api-key` | `FINGERPRINT_API_KEY` | (required) | Your Fingerprint secret API key |
-| `--region` | `FINGERPRINT_REGION` | `us` | API region: `us`, `eu`, or `ap` |
-| `--transport` | `MCP_TRANSPORT` | `stdio` | Transport protocol: `stdio` or `sse` |
-| `--port` | `MCP_PORT` | `8080` | Port for SSE server |
+| `--server-api-key` | `FINGERPRINT_SERVER_API_KEY` | (required in private mode) | Fingerprint Server API key |
+| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` | | Fingerprint Management API key (enables management tools) |
+| `--region` | `FINGERPRINT_REGION` | `us` | API region: `us`, `eu`, or `asia` |
+| `--transport` | `MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `streamable-http` |
+| `--port` | `MCP_PORT` | `8080` | Port for HTTP/HTTPS server |
+| `--tls-cert` | `MCP_TLS_CERT` | | Path to TLS certificate file |
+| `--tls-key` | `MCP_TLS_KEY` | | Path to TLS private key file |
+| `--read-only` | `MCP_READ_ONLY` | `false` | Only expose read tools (no create/update/delete) |
+| `--public` | `MCP_PUBLIC` | `false` | Public mode: expect API keys in HTTP headers instead of config |
+| `--auth-token` | `MCP_AUTH_TOKEN` | (auto-generated) | Bearer token required to access the server |
 
 ## Usage
 
 ### Stdio Transport (Default)
 
 ```bash
-# Using environment variable
-export FINGERPRINT_API_KEY=your-secret-api-key
+export FINGERPRINT_SERVER_API_KEY=your-secret-api-key
 ./fingerprint-mcp-server
-
-# Using CLI flag
-./fingerprint-mcp-server --api-key=your-secret-api-key
 ```
 
-### SSE Transport
+### Streamable HTTP Transport
 
 ```bash
-export FINGERPRINT_API_KEY=your-secret-api-key
-./fingerprint-mcp-server --transport=sse --port=8080
+export FINGERPRINT_SERVER_API_KEY=your-secret-api-key
+./fingerprint-mcp-server --transport=streamable-http --port=8080
 ```
 
-The SSE endpoint will be available at `http://localhost:8080/sse`.
+The MCP endpoint will be available at `http://localhost:8080/mcp`.
+
+### HTTPS
+
+Provide TLS certificate and key files to enable HTTPS:
+
+```bash
+./fingerprint-mcp-server --transport=streamable-http \
+  --tls-cert=cert.pem --tls-key=key.pem
+```
 
 ## Docker
 
@@ -74,16 +89,16 @@ docker build -t fingerprint-mcp-server .
 
 ```bash
 docker run -i --rm \
-  -e FINGERPRINT_API_KEY=your-secret-api-key \
+  -e FINGERPRINT_SERVER_API_KEY=your-secret-api-key \
   fingerprint-mcp-server
 ```
 
-### Run with SSE Transport
+### Run with Streamable HTTP Transport
 
 ```bash
 docker run -d --rm \
-  -e FINGERPRINT_API_KEY=your-secret-api-key \
-  -e MCP_TRANSPORT=sse \
+  -e FINGERPRINT_SERVER_API_KEY=your-secret-api-key \
+  -e MCP_TRANSPORT=streamable-http \
   -p 8080:8080 \
   fingerprint-mcp-server
 ```
@@ -101,7 +116,7 @@ Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
     "fingerprint": {
       "command": "/path/to/fingerprint-mcp-server",
       "env": {
-        "FINGERPRINT_API_KEY": "your-secret-api-key"
+        "FINGERPRINT_SERVER_API_KEY": "your-secret-api-key"
       }
     }
   }
@@ -114,7 +129,7 @@ Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
   "mcpServers": {
     "fingerprint": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "FINGERPRINT_API_KEY=your-secret-api-key", "fingerprint-mcp-server"]
+      "args": ["run", "-i", "--rm", "-e", "FINGERPRINT_SERVER_API_KEY=your-secret-api-key", "fingerprint-mcp-server"]
     }
   }
 }
@@ -122,7 +137,11 @@ Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
 
 ## Available Tools
 
-### get_event
+### Event Tools
+
+These tools require a Server API key.
+
+#### get_event
 
 Retrieves detailed information about a specific identification event.
 
@@ -130,7 +149,7 @@ Retrieves detailed information about a specific identification event.
 - `event_id` (string, required): The unique identifier of the identification event
 - `products` (string[], optional): Product fields to include in the response
 
-### search_events
+#### search_events
 
 Searches for events matching various filters with pagination.
 
@@ -144,10 +163,56 @@ Searches for events matching various filters with pagination.
 
 Both tools return comprehensive event data including visitor identification, browser details, geolocation, bot detection, and smart signals.
 
+### Management Tools
+
+These tools require a Management API key. Write tools are hidden when `--read-only` is set.
+
+#### list_environments
+
+Lists all workspace environments with pagination support.
+
+#### list_api_keys
+
+Lists API keys with optional filters by type (`public`/`secret`/`proxy`), status (`enabled`/`disabled`), and environment.
+
+#### get_api_key
+
+Retrieves detailed information about a specific API key by its ID.
+
+#### create_environment
+
+Creates a new workspace environment with name, description, and optional rate limits.
+
+#### update_environment
+
+Updates an existing workspace environment.
+
+#### delete_environment
+
+Deletes a workspace environment (only if it has no active API keys).
+
+#### create_api_key
+
+Creates a new API key of a given type (`public`/`secret`/`proxy`).
+
+#### update_api_key
+
+Updates an existing API key (name, description, status, rate limit).
+
+#### delete_api_key
+
+Deletes an API key. This operation is irreversible.
+
 ## Available Resources
 
 - **`fingerprint://events/{event_id}`** — Returns full event data for a given event ID.
 - **`fingerprint://schemas/event`** — JSON Schema describing the event output structure.
+- **`fingerprint://schemas/environment`** — JSON Schema for environment objects.
+- **`fingerprint://schemas/api-key`** — JSON Schema for API key objects.
+
+## Available Prompts
+
+- **`onboarding`** — A guided walkthrough for integrating Fingerprint into a project, covering JavaScript Agent installation, API key setup, and verification steps.
 
 ## Regional API Endpoints
 
