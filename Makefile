@@ -13,5 +13,7 @@ generate:
 build: generate
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o fingerprint-mcp-server ./cmd/fingeprint-mcp-server
 
+PLATFORM ?= linux/$(shell go env GOARCH)
+
 docker:
-	docker build --build-arg VERSION=$(VERSION) -t fingerprint-mcp-server .
+	docker build --platform $(PLATFORM) --build-arg VERSION=$(VERSION) -t fingerprint-mcp-server .

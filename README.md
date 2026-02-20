@@ -105,9 +105,7 @@ docker run -d --rm \
 
 ## MCP Client Configuration
 
-### Claude Desktop
-
-Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
+Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_config.json`):
 
 **Stdio Transport:**
 ```json
@@ -117,6 +115,23 @@ Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
       "command": "/path/to/fingerprint-mcp-server",
       "env": {
         "FINGERPRINT_SERVER_API_KEY": "your-secret-api-key"
+      }
+    }
+  }
+}
+```
+
+**Streamable HTTP Transport:**
+```json
+{
+  "mcpServers": {
+    "fingerprint": {
+      "url": "https://url/mcp",
+      "headers": {
+        "Authorization": "Bearer <auth-token-if-needed>",
+        "X-Fingerprint-Server-Api-Key": "<server-api-key>",
+        "X-Fingerprint-Server-Api-Region": "us",
+        "X-Fingerprint-Management-Api-Key": "<management-api-key>"
       }
     }
   }
