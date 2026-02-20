@@ -1,7 +1,8 @@
 package config
 
-// set at buildtime via ldflags
-const VERSION = "1.0.0+abcdef"
+// VERSION is set at build time via ldflags.
+var VERSION = "dev"
+
 const STATELESS = true
 
 // Config holds the server configuration

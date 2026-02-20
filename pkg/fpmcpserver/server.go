@@ -101,14 +101,24 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", handler)
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	addr := ":" + strconv.Itoa(a.cfg.Port)
 
+	var mode string
+	if a.cfg.PublicMode {
+		mode = "public"
+	} else {
+		mode = "private"
+	}
 	if a.cfg.TLSCert != "" && a.cfg.TLSKey != "" {
-		slog.Info("Starting streamable HTTPS endpoint", "url", fmt.Sprintf("https://%s/mcp", addr))
+		slog.Info("Starting streamable HTTPS endpoint", "url", fmt.Sprintf("https://%s/mcp", addr), "mode", mode)
 		return fmt.Errorf("running streamable https server: %w", http.ListenAndServeTLS(addr, a.cfg.TLSCert, a.cfg.TLSKey, a.corsMiddleware(mux)))
 	} else {
-		slog.Info("Starting streamable HTTP endpoint", "url", fmt.Sprintf("http://%s/mcp", addr))
+		slog.Info("Starting streamable HTTP endpoint", "url", fmt.Sprintf("http://%s/mcp", addr), "mode", mode)
 		return fmt.Errorf("running streamable http server: %w", http.ListenAndServe(addr, a.corsMiddleware(mux)))
 	}
 }

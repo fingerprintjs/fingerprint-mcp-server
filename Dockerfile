@@ -1,35 +1,27 @@
-# Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
+
+ARG VERSION=dev
 
 WORKDIR /app
 
-# Install git (required for fetching dependencies)
-RUN apk add --no-cache git
+RUN apk add --no-cache make
 
-# Copy go mod files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o fingerprint-mcp-server .
+RUN make build VERSION="$VERSION"
 
-# Runtime stage
-FROM alpine:latest
+FROM alpine:3
 
-RUN apk --no-cache add ca-certificates
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /app/fingerprint-mcp-server .
+COPY --from=builder /app/fingerprint-mcp-server /app/fingerprint-mcp-server
+COPY --from=builder /app/skills /app/skills
 
-# Expose port for SSE transport
 EXPOSE 8080
 
-# Default to stdio transport
 ENTRYPOINT ["/app/fingerprint-mcp-server"]

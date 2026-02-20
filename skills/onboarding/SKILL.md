@@ -12,6 +12,7 @@ Some users might want to create a new demo page from scratch while others want t
 To communicate to Fingerprint, one needs a Public API key that is used by the JS Agent and exposed in the webpage source, and a Secret API key used for server-to-server communications. Both types of api keys can be fetched/created using Fingerprint MCP Tools `list_api_keys`, `get_api_key` and `create_api_key`. Alternatively one can talk to the Management API directly, see instructions below. Alternatively assistant can advise users to navigate to the Fingerprint Dashboard at https://dashboard.fingerprint.com/ to check the event history manually.
 
 Successful onboarding consists of the following steps:
+
 0. Important: Read the docs first: https://docs.fingerprint.com/docs/install-the-javascript-agent.md 
 1. Add JS Agent invocation to the webpage.
 2. Open the webpage in a browser

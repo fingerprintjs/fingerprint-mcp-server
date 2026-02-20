@@ -1,5 +1,3 @@
-//go:generate go run ./cmd/generate-schema
-
 package main
 
 import (
