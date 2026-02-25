@@ -20,7 +20,6 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/fingerprint-mcp-server /app/fingerprint-mcp-server
-COPY --from=builder /app/skills /app/skills
 
 EXPOSE 8080
 

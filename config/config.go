@@ -1,7 +1,10 @@
 package config
 
-// VERSION is set at build time via ldflags.
-var VERSION = "dev"
+import (
+	"runtime/debug"
+
+	"github.com/alexflint/go-arg"
+)
 
 const STATELESS = true
 
@@ -20,5 +23,24 @@ type Config struct {
 }
 
 func (c Config) Version() string {
-	return VERSION
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	// When imported as a dependency, find ourselves in Deps
+	for _, dep := range bi.Deps {
+		if dep.Path == "github.com/fingerprintjs/fingerprint-mcp-server" {
+			return dep.Version
+		}
+	}
+
+	// When running as the main module (dev), Main.Version is "(devel)"
+	return bi.Main.Version
+}
+
+func MustParse() *Config {
+	cfg := &Config{}
+	arg.MustParse(cfg)
+	return cfg
 }

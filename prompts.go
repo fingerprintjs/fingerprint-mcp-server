@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -19,14 +20,8 @@ type skillFrontmatter struct {
 	Description string
 }
 
-// parseSkillFile reads a SKILL.md file and extracts the YAML frontmatter
-// and the full file content.
-func parseSkillFile(path string) (*skillFrontmatter, string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, "", fmt.Errorf("reading skill file: %w", err)
-	}
-
+// parseSkillPrompt extracts the YAML frontmatter and the full file content.
+func parseSkillPrompt(data []byte) (*skillFrontmatter, string, error) {
 	content := string(data)
 	fm, err := parseFrontmatter(data)
 	if err != nil {
@@ -72,27 +67,41 @@ func parseFrontmatter(data []byte) (*skillFrontmatter, error) {
 	return nil, errors.New("missing closing frontmatter delimiter")
 }
 
+//go:embed skills/*
+var skills embed.FS
+
 func (a *App) registerPrompts(_ context.Context) error {
-	errs := []error{
-		a.registerSkillPrompt("skills/onboarding/SKILL.md"),
+	var errs []error
+
+	err := fs.WalkDir(skills, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != "SKILL.md" {
+			return nil
+		}
+		data, err := skills.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", path, err)
+		}
+		errs = append(errs, a.registerSkillPrompt(filepath.Base(filepath.Dir(path)), data))
+		return nil
+	})
+	if err != nil {
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)
 }
 
-func (a *App) registerSkillPrompt(skillPath string) error {
-	absPath, err := filepath.Abs(skillPath)
+func (a *App) registerSkillPrompt(name string, data []byte) error {
+	fm, content, err := parseSkillPrompt(data)
 	if err != nil {
-		return fmt.Errorf("resolving skill path: %w", err)
-	}
-
-	fm, content, err := parseSkillFile(absPath)
-	if err != nil {
-		return fmt.Errorf("loading skill %s: %w", skillPath, err)
+		return fmt.Errorf("loading skill %s: %w", name, err)
 	}
 
 	a.server.AddPrompt(&mcp.Prompt{
-		Name:        filepath.Base(filepath.Dir(skillPath)),
+		Name:        name,
 		Title:       fm.Name,
 		Description: fm.Description,
 	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {

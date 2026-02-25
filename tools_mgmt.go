@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/fingerprintjs/fingerprint-mcp-server/pkg/mgmtapi"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/mgmtapi"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

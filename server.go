@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fingerprintjs/fingerprint-mcp-server/internal/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/config"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -18,10 +18,34 @@ import (
 type App struct {
 	server *mcp.Server
 	cfg    *config.Config
+	opts   *opts
 }
 
-func Run(ctx context.Context, config *config.Config) error {
-	app, err := New(config)
+type opts struct {
+	l *slog.Logger
+}
+
+func (o opts) logger() *slog.Logger {
+	if o.l != nil {
+		return o.l
+	}
+	return slog.Default()
+}
+
+type OptFunc func(o *opts)
+
+func WithLogger(logger *slog.Logger) OptFunc {
+	return func(o *opts) {
+		o.l = logger
+	}
+}
+
+func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
+	opts := &opts{}
+	for _, f := range options {
+		f(opts)
+	}
+	app, err := New(config, opts)
 	if err != nil {
 		return err
 	}
@@ -41,25 +65,29 @@ func Run(ctx context.Context, config *config.Config) error {
 	return app.run(ctx)
 }
 
-func New(cfg *config.Config) (*App, error) {
+func New(cfg *config.Config, opts *opts) (*App, error) {
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
 				Name:    "fingerprint-mcp-server",
-				Version: config.VERSION,
+				Version: cfg.Version(),
 			},
 			&mcp.ServerOptions{
 				Logger: slog.Default(),
 			},
 		),
-		cfg: cfg,
+		cfg:  cfg,
+		opts: opts,
 	}
 
 	return a, nil
 }
 
 func (a *App) runStdioServer(ctx context.Context) error {
-	slog.Debug("starting stdio server")
+	a.opts.logger().Debug("starting stdio server")
 	if err := a.server.Run(ctx, &mcp.StdioTransport{}); err != nil {
 		return fmt.Errorf("running stdio server: %w", err)
 	}
@@ -90,10 +118,10 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Reque
 func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return a.server
-	}, &mcp.StreamableHTTPOptions{Stateless: config.STATELESS, Logger: slog.Default()})
+	}, &mcp.StreamableHTTPOptions{Stateless: config.STATELESS, Logger: a.opts.logger()})
 
 	if a.cfg.AuthToken != "" {
-		slog.Info("Pass auth token in `Authorization: Bearer` http header to access this server", "auth_token", a.cfg.AuthToken)
+		a.opts.logger().Info("pass auth token in `Authorization: Bearer` http header to access this server", "auth_token", a.cfg.AuthToken)
 		apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, &auth.RequireBearerTokenOptions{})
 
 		handler = apiKeyAuth(handler)
@@ -114,13 +142,22 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	} else {
 		mode = "private"
 	}
+
+	var proto string
 	if a.cfg.TLSCert != "" && a.cfg.TLSKey != "" {
-		slog.Info("Starting streamable HTTPS endpoint", "url", fmt.Sprintf("https://%s/mcp", addr), "mode", mode)
-		return fmt.Errorf("running streamable https server: %w", http.ListenAndServeTLS(addr, a.cfg.TLSCert, a.cfg.TLSKey, a.corsMiddleware(mux)))
+		proto = "https"
 	} else {
-		slog.Info("Starting streamable HTTP endpoint", "url", fmt.Sprintf("http://%s/mcp", addr), "mode", mode)
-		return fmt.Errorf("running streamable http server: %w", http.ListenAndServe(addr, a.corsMiddleware(mux)))
+		proto = "http"
 	}
+	a.opts.logger().Info("starting streamable-http endpoint", "url", fmt.Sprintf("%s://%s/mcp", proto, addr), "mode", mode)
+
+	var err error
+	if proto == "https" {
+		err = http.ListenAndServeTLS(addr, a.cfg.TLSCert, a.cfg.TLSKey, a.corsMiddleware(mux))
+	} else {
+		err = http.ListenAndServe(addr, a.corsMiddleware(mux))
+	}
+	return fmt.Errorf("running streamable-http server: %w", err)
 }
 
 func (a *App) corsMiddleware(next http.Handler) http.Handler {
