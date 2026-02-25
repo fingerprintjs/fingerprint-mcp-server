@@ -76,7 +76,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 				Version: cfg.Version(),
 			},
 			&mcp.ServerOptions{
-				Logger: slog.Default(),
+				Logger: opts.logger(),
 			},
 		),
 		cfg:  cfg,

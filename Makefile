@@ -1,10 +1,3 @@
-TAG     ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo untagged)
-COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-VERSION ?= $(TAG)+$(COMMIT)
-
-MODULE  = github.com/fingerprintjs/fingerprint-mcp-server
-LDFLAGS = -X 'main.VERSION=$(VERSION)'
-
 .PHONY: generate build docker
 
 generate:
