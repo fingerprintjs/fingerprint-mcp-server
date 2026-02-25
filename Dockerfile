@@ -21,6 +21,7 @@ WORKDIR /app
 
 COPY --from=builder /app/fingerprint-mcp-server /app/fingerprint-mcp-server
 
+# 8080 can be changed to a different port via app config
 EXPOSE 8080
 
 ENTRYPOINT ["/app/fingerprint-mcp-server"]
