@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/mgmtapi"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -115,6 +116,13 @@ func (a *App) registerListEnvironmentsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "list_environments",
 		Description: "Lists all workspace environments. Returns environment details including name, description, limits, and restriction status. For schema, see mcp resource fingerprint://schemas/environment",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    true,
+			Title:           "List Environments",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListEnvironmentsInput) (*mcp.CallToolResult, *ListEnvironmentsOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -143,6 +151,13 @@ func (a *App) registerCreateEnvironmentTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "create_environment",
 		Description: "Creates a new workspace environment. Requires a name (3-255 chars). Optionally set description, limit mode (none/restrict/notify), and limit value. For schema, see mcp resource fingerprint://schemas/environment",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Create Environment",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CreateEnvironmentInput) (*mcp.CallToolResult, *CreateEnvironmentOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -175,6 +190,13 @@ func (a *App) registerUpdateEnvironmentTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "update_environment",
 		Description: "Updates an existing workspace environment. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/environment",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Update Environment",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UpdateEnvironmentInput) (*mcp.CallToolResult, *UpdateEnvironmentOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -207,6 +229,13 @@ func (a *App) registerDeleteEnvironmentTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "delete_environment",
 		Description: "Deletes a workspace environment. You can only delete environments that don't have any active API keys associated with them.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(true),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Delete Environment",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteEnvironmentInput) (*mcp.CallToolResult, *struct{}, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -235,6 +264,13 @@ func (a *App) registerListAPIKeysTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "list_api_keys",
 		Description: "Lists API keys with optional filters by type (public/secret/proxy), status (enabled/disabled), and environment. Supports pagination. For schema, see mcp resource fingerprint://schemas/api-key",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    true,
+			Title:           "List API Keys",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListAPIKeysInput) (*mcp.CallToolResult, *ListAPIKeysOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -272,6 +308,13 @@ func (a *App) registerGetAPIKeyTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "get_api_key",
 		Description: "Retrieves detailed information about a specific API key by its ID. For schema, see mcp resource fingerprint://schemas/api-key",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    true,
+			Title:           "Get API Key",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetAPIKeyInput) (*mcp.CallToolResult, *GetAPIKeyOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -299,6 +342,13 @@ func (a *App) registerCreateAPIKeyTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "create_api_key",
 		Description: "Creates a new API key. Requires type (public/secret/proxy) and name (3-255 chars). Secret key tokens are only visible at creation time. For schema, see mcp resource fingerprint://schemas/api-key",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Create API Key",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CreateAPIKeyInput) (*mcp.CallToolResult, *CreateAPIKeyOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -334,6 +384,13 @@ func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "update_api_key",
 		Description: "Updates an existing API key. Can change name, description, status (enabled/disabled), and rate limit. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/api-key",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Update API Key",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UpdateAPIKeyInput) (*mcp.CallToolResult, *UpdateAPIKeyOutput, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error
@@ -366,6 +423,13 @@ func (a *App) registerDeleteAPIKeyTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:        "delete_api_key",
 		Description: "Deletes an API key. This operation is irreversible.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(true),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Delete API Key",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteAPIKeyInput) (*mcp.CallToolResult, *struct{}, error) {
 		var mgmtClient *mgmtapi.Client
 		var err error

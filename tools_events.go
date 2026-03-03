@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/utils"
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -78,6 +79,13 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		Description:  "Retrieves detailed information about a specific identification event from Fingerprint using its event_id. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
 		OutputSchema: schema.SchemaFromStruct(GetEventOutput{}),
 		InputSchema:  schema.PatchProductsEnum(schema.SchemaFromStruct(GetEventInput{})),
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    true,
+			Title:           "Get Event",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetEventInput) (*mcp.CallToolResult, *GetEventOutput, error) {
 		var fpClient *sdk.APIClient
 		var fpSDKCtx context.Context
@@ -110,6 +118,13 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		Description:  "Retrieves detailed information about events matching provided criteria. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
 		OutputSchema: schema.SchemaFromStruct(SearchEventsOutput{}),
 		InputSchema:  schema.PatchProductsEnum(schema.SearchEventsInputSchema),
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    true,
+			Title:           "Search Event History",
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input schema.SearchEventInput) (*mcp.CallToolResult, *SearchEventsOutput, error) {
 		var fpClient *sdk.APIClient
 		var fpSDKCtx context.Context
