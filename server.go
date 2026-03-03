@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,10 +18,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
-
-const headerServerApiKey = "X-Fingerprint-Server-Api-Key"
-const headerServerApiRegion = "X-Fingerprint-Server-Api-Region"
-const headerMgmtApiKey = "X-Fingerprint-Management-Api-Key"
 
 type App struct {
 	server *mcp.Server
@@ -140,7 +137,9 @@ const tokenExtraServerApiKey = "server_api_key"
 const tokenExtraMgmtApiKey = "mgmt_api_key"
 const tokenExtraRegionKey = "region"
 
-func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Request) (*auth.TokenInfo, error) {
+var simpleTokenRe = regexp.MustCompile(`^([a-zA-Z0-9]*)-([a-zA-Z0-9]*)-([a-zA-Z0-9]*)$`)
+
+func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Request) (*auth.TokenInfo, error) {
 	var expiration = time.Now().Add(24 * time.Hour) // most tokens never expire
 
 	if a.cfg.AuthToken != "" {
@@ -153,28 +152,19 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 			Expiration: expiration,
 		}, nil
 	} else if a.cfg.PublicMode {
-		// Public mode without a pre-configured auth token
+		// Public mode without a pre-configured auth token.
+		// API keys are extracted from the bearer token. Two formats are supported:
+		// 1) Simple: "serverKey-mgmtKey-region" (dash-separated, alphanumeric, any part can be empty)
+		// 2) JWT: a signed JWT whose subject encodes the same three parts
+		//
+		// We're not doing strict verification here -- just basic sanity checks for user convenience.
+		// Actual access verification happens on the backend using the API keys.
 
-		// In this case, we're not doing any real verification here, we're rather doing basic sanity checks if we have what we need.
-		// It is only done for user's convenience trying to catch basic problems before they invoke a tool.
-		// Actual access verification happens on the backend using the API keys. Therefore, it is quite easy to bypass these checks,
-		// but it is not a security issue, it will only lead to the access error being thrown later when we talk to the backend.
+		var keys []string
 
-		// We need to get API keys from somewhere. Two options: 1) X- headers, and 2) JWT token in the Auth header
-
-		// Let's check api keys explicitly passed via dedicated headers because they have priority over what we get in Auth header
-		keys := []string{
-			req.Header.Get(headerServerApiKey),
-			req.Header.Get(headerMgmtApiKey),
-			req.Header.Get(headerServerApiRegion),
-		}
-		allEmpty := true
-		for _, value := range keys {
-			allEmpty = allEmpty && (len(value) == 0)
-		}
-
-		if allEmpty && a.oauthEnabled() {
-			// If no X- headers passed, lets check if we have the oauth jwt then
+		if matches := simpleTokenRe.FindStringSubmatch(authToken); matches != nil {
+			keys = matches[1:4]
+		} else if a.oauthEnabled() {
 			if a.jwks == nil {
 				return nil, fmt.Errorf("JWKS not configured: set JWKS_URL for public mode JWT verification")
 			}
@@ -193,13 +183,15 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 
 			keys = parts
 			expiration = token.Expiration()
-
-			for _, value := range keys {
-				allEmpty = allEmpty && (len(value) == 0)
-			}
 		}
 
-		// couldn't find any api keys anywhere
+		allEmpty := true
+		for _, value := range keys {
+			if len(value) > 0 {
+				allEmpty = false
+				break
+			}
+		}
 		if allEmpty {
 			return nil, auth.ErrInvalidToken
 		}
@@ -295,15 +287,8 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 	if !config.STATELESS {
 		allowHeaders = append(allowHeaders, "Mcp-Session-Id")
 	}
-	if a.cfg.AuthToken != "" {
+	if a.cfg.AuthToken != "" || a.cfg.PublicMode {
 		allowHeaders = append(allowHeaders, "Authorization")
-	}
-	if a.cfg.PublicMode {
-		allowHeaders = append(allowHeaders,
-			headerMgmtApiKey,
-			headerServerApiKey,
-			headerServerApiRegion,
-		)
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

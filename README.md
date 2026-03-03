@@ -9,7 +9,7 @@ An MCP (Model Context Protocol) server for [Fingerprint](https://fingerprint.com
 - **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
-- **Public mode** for multi-tenant deployments (API keys passed via HTTP headers)
+- **Public mode** for multi-tenant deployments (API keys passed via bearer token)
 - **Read-only mode** to expose only read tools
 - Configurable via environment variables or CLI flags
 - Docker support for easy deployment
@@ -128,10 +128,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
     "fingerprint": {
       "url": "https://url/mcp",
       "headers": {
-        "Authorization": "Bearer <auth-token-if-needed>",
-        "X-Fingerprint-Server-Api-Key": "<server-api-key>",
-        "X-Fingerprint-Server-Api-Region": "us",
-        "X-Fingerprint-Management-Api-Key": "<management-api-key>"
+        "Authorization": "Bearer <server-api-key>-<management-api-key>-<region>"
       }
     }
   }
