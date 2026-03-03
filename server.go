@@ -153,10 +153,16 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 			Expiration: expiration,
 		}, nil
 	} else if a.cfg.PublicMode {
-		// public mode without a pre-configured auth token
-		// we need to get API keys from somewhere. Two options: 1) X- headers, and 2) JWT token in the Auth header
+		// Public mode without a pre-configured auth token
 
-		// Lets check api keys explicitly passed via dedicated headers because they have priority over what we get in Auth header
+		// In this case, we're not doing any real verification here, we're rather doing basic sanity checks if we have what we need.
+		// It is only done for user's convenience trying to catch basic problems before they invoke a tool.
+		// Actual access verification happens on the backend using the API keys. Therefore, it is quite easy to bypass these checks,
+		// but it is not a security issue, it will only lead to the access error being thrown later when we talk to the backend.
+
+		// We need to get API keys from somewhere. Two options: 1) X- headers, and 2) JWT token in the Auth header
+
+		// Let's check api keys explicitly passed via dedicated headers because they have priority over what we get in Auth header
 		keys := []string{
 			req.Header.Get(headerServerApiKey),
 			req.Header.Get(headerMgmtApiKey),
@@ -167,8 +173,8 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 			allEmpty = allEmpty && (len(value) == 0)
 		}
 
-		if allEmpty {
-			// If no X- headers passed, lets check the auth header then
+		if allEmpty && a.oauthEnabled() {
+			// If no X- headers passed, lets check if we have the oauth jwt then
 			if a.jwks == nil {
 				return nil, fmt.Errorf("JWKS not configured: set JWKS_URL for public mode JWT verification")
 			}
@@ -187,6 +193,15 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 
 			keys = parts
 			expiration = token.Expiration()
+
+			for _, value := range keys {
+				allEmpty = allEmpty && (len(value) == 0)
+			}
+		}
+
+		// couldn't find any api keys anywhere
+		if allEmpty {
+			return nil, auth.ErrInvalidToken
 		}
 
 		return &auth.TokenInfo{
@@ -203,6 +218,13 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, req *http.Req
 	return nil, nil
 }
 
+func (a *App) oauthEnabled() bool {
+	return a.cfg.PublicMode &&
+		a.cfg.OAuthAuthorizationServer != "" &&
+		a.cfg.OAuthResource != "" &&
+		a.cfg.JwksURL != ""
+}
+
 func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return a.server
@@ -215,8 +237,8 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 
 	bearerTokenOptions := &auth.RequireBearerTokenOptions{}
 
-	// only advertise OAuth when we're in public mode
-	if a.cfg.PublicMode {
+	// only advertise OAuth when we have all we need for it
+	if a.oauthEnabled() {
 		// OAuth protected resource metadata endpoint.
 		// This endpoint provides OAuth configuration information to clients.
 		// CORS is enabled by default to support cross-origin client discovery.
