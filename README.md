@@ -37,18 +37,18 @@ go build -o fingerprint-mcp-server .
 
 The server can be configured via CLI flags or environment variables:
 
-| CLI Flag | Environment Variable | Default | Description |
-|----------|---------------------|---------|-------------|
-| `--server-api-key` | `FINGERPRINT_SERVER_API_KEY` | (required in private mode) | Fingerprint Server API key |
-| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` | | Fingerprint Management API key (enables management tools) |
-| `--region` | `FINGERPRINT_REGION` | `us` | API region: `us`, `eu`, or `asia` |
-| `--transport` | `MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `streamable-http` |
-| `--port` | `MCP_PORT` | `8080` | Port for HTTP/HTTPS server |
-| `--tls-cert` | `MCP_TLS_CERT` | | Path to TLS certificate file |
-| `--tls-key` | `MCP_TLS_KEY` | | Path to TLS private key file |
-| `--read-only` | `MCP_READ_ONLY` | `false` | Only expose read tools (no create/update/delete) |
+| CLI Flag | Environment Variable | Default | Description                                                    |
+|----------|---------------------|---------|----------------------------------------------------------------|
+| `--server-api-key` | `FINGERPRINT_SERVER_API_KEY` | (required in private mode) | Fingerprint Server API key                                     |
+| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` | | Fingerprint Management API key (enables management tools)      |
+| `--region` | `FINGERPRINT_REGION` | `us` | API region: `us`, `eu`, or `ap`                                |
+| `--transport` | `MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `streamable-http`                        |
+| `--port` | `MCP_PORT` | `8080` | Port for HTTP/HTTPS server                                     |
+| `--tls-cert` | `MCP_TLS_CERT` | | Path to TLS certificate file                                   |
+| `--tls-key` | `MCP_TLS_KEY` | | Path to TLS private key file                                   |
+| `--read-only` | `MCP_READ_ONLY` | `false` | Only expose read tools (no create/update/delete)               |
 | `--public` | `MCP_PUBLIC` | `false` | Public mode: expect API keys in HTTP headers instead of config |
-| `--auth-token` | `MCP_AUTH_TOKEN` | (auto-generated) | Bearer token required to access the server |
+| `--auth-token` | `MCP_AUTH_TOKEN` | (auto-generated) | Bearer token required to access the server                     |
 
 ## Usage
 

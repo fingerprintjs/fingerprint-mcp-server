@@ -9,12 +9,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const headerMgmtApiKey = "X-Fingerprint-Management-Api-Key"
-
 func (a *App) requireMgmtClient(req *mcp.CallToolRequest) (*mgmtapi.Client, error) {
 	var apiKey string
 	if a.cfg.PublicMode {
-		apiKey = req.Extra.Header.Get(headerMgmtApiKey)
+		apiKey = req.Extra.TokenInfo.Extra[tokenExtraMgmtApiKey].(string)
 	} else {
 		apiKey = a.cfg.ManagementAPIKey
 	}

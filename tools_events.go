@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
@@ -27,13 +26,10 @@ type SearchEventsOutput struct {
 	Events sdk.SearchEventsResponse `json:"events" ref:"SearchEventsResponse"`
 }
 
-const headerServerApiKey = "X-Fingerprint-Server-Api-Key"
-const headerServerApiRegion = "X-Fingerprint-Server-Api-Region"
-
-func (a *App) requireServerApiClient(ctx context.Context, header http.Header) (*sdk.APIClient, context.Context, error) {
+func (a *App) requireServerApiClient(ctx context.Context, reqExtra *mcp.RequestExtra) (*sdk.APIClient, context.Context, error) {
 	var apiKey string
 	if a.cfg.PublicMode {
-		apiKey = header.Get(headerServerApiKey)
+		apiKey = reqExtra.TokenInfo.Extra[tokenExtraServerApiKey].(string)
 	} else {
 		apiKey = a.cfg.ServerAPIKey
 	}
@@ -43,7 +39,7 @@ func (a *App) requireServerApiClient(ctx context.Context, header http.Header) (*
 
 	var region string
 	if a.cfg.PublicMode {
-		region = header.Get(headerServerApiRegion)
+		region = reqExtra.TokenInfo.Extra[tokenExtraRegionKey].(string)
 	} else {
 		region = a.cfg.Region
 	}
@@ -58,12 +54,12 @@ func (a *App) requireServerApiClient(ctx context.Context, header http.Header) (*
 	switch region {
 	case "eu":
 		fpSDKConfig.ChangeRegion(sdk.RegionEU)
-	case "asia":
+	case "ap":
 		fpSDKConfig.ChangeRegion(sdk.RegionAsia)
 	case "us":
 		fpSDKConfig.ChangeRegion(sdk.RegionUS)
 	default:
-		return nil, nil, fmt.Errorf("unknown region %s, must be one of: us, eu, asia", a.cfg.Region)
+		return nil, nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", a.cfg.Region)
 	}
 
 	fpSDKCtx := context.WithValue(
@@ -86,7 +82,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		var fpClient *sdk.APIClient
 		var fpSDKCtx context.Context
 		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra.Header); err != nil {
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra); err != nil {
 			return nil, nil, err
 		}
 		if input.EventID == "" {
@@ -118,7 +114,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		var fpClient *sdk.APIClient
 		var fpSDKCtx context.Context
 		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra.Header); err != nil {
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra); err != nil {
 			return nil, nil, err
 		}
 

@@ -35,7 +35,7 @@ func (a *App) registerEventResource(_ context.Context) error {
 		var fpClient *sdk.APIClient
 		var fpSDKCtx context.Context
 		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, request.Extra.Header); err != nil {
+		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, request.Extra); err != nil {
 			return nil, err
 		}
 
