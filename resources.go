@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
-	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/yosida95/uritemplate/v3"
 )
@@ -32,19 +31,18 @@ func (a *App) registerEventResource(_ context.Context) error {
 			return nil, fmt.Errorf("could not parse resource uri")
 		}
 
-		var fpClient *sdk.APIClient
-		var fpSDKCtx context.Context
-		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, request.Extra); err != nil {
+		fpClient, err := a.requireFingerprintClient(ctx, request.Extra)
+		if err != nil {
 			return nil, err
 		}
 
 		// Call Fingerprint API
-		event, _, fpErr := fpClient.FingerprintApi.GetEvent(fpSDKCtx, uriValues.Get("event_id").String())
+		event, _, fpErr := fpClient.GetEvent(ctx, uriValues.Get("event_id").String())
 		if fpErr != nil {
 			return nil, fmt.Errorf("failed to get event: %w", fpErr)
 		}
 
+		schema.StripAdditionalProperties(event)
 		bytes, err := json.Marshal(event)
 		if err != nil {
 			return nil, fmt.Errorf("could not serialize event into json")

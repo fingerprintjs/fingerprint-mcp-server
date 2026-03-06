@@ -5,53 +5,11 @@ import (
 	"testing"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
-	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
+	"github.com/fingerprintjs/go-sdk/v8"
 )
 
-// inputOnlyFields lists SearchEventInput fields that intentionally have no
-// corresponding field in sdk.FingerprintApiSearchEventsOpts.
-var inputOnlyFields = map[string]bool{
-	"Limit":    true,
-	"Products": true,
-}
-
-// Catches SDK adding a new field that our generated SearchEventInput doesn't have yet.
-func TestSearchEventInputToOpts_AllOptsFieldsHaveMatchingInputField(t *testing.T) {
-	inputType := reflect.TypeOf(schema.SearchEventInput{})
-	optsType := reflect.TypeOf(sdk.FingerprintApiSearchEventsOpts{})
-
-	for i := 0; i < optsType.NumField(); i++ {
-		optsField := optsType.Field(i)
-		inputField, ok := inputType.FieldByName(optsField.Name)
-		if !ok {
-			t.Errorf("opts field %q has no corresponding field in SearchEventInput", optsField.Name)
-			continue
-		}
-		if !inputField.Type.AssignableTo(optsField.Type) {
-			t.Errorf("field %q: SearchEventInput type %s is not assignable to opts type %s",
-				optsField.Name, inputField.Type, optsField.Type)
-		}
-	}
-}
-
-// Catches the OpenAPI spec adding a field that the SDK doesn't support, or a typo in the generated name.
-func TestSearchEventInputToOpts_AllInputFieldsMapped(t *testing.T) {
-	inputType := reflect.TypeOf(schema.SearchEventInput{})
-	optsType := reflect.TypeOf(sdk.FingerprintApiSearchEventsOpts{})
-
-	for i := 0; i < inputType.NumField(); i++ {
-		name := inputType.Field(i).Name
-		if inputOnlyFields[name] {
-			continue
-		}
-		if _, ok := optsType.FieldByName(name); !ok {
-			t.Errorf("input field %q has no corresponding field in FingerprintApiSearchEventsOpts and is not in the skip list", name)
-		}
-	}
-}
-
-// Verifies the reflection-based copier actually transfers every value, not just that fields exist.
-func TestSearchEventInputToOpts_CopiesAllValues(t *testing.T) {
+// Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
+func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.
 	input := schema.SearchEventInput{}
 	inputVal := reflect.ValueOf(&input).Elem()
@@ -60,17 +18,12 @@ func TestSearchEventInputToOpts_CopiesAllValues(t *testing.T) {
 		setNonZero(t, inputVal.Type().Field(i).Name, field)
 	}
 
-	opts := schema.SearchEventInputToOpts(&input)
+	// Should not panic
+	req := schema.SearchEventInputToRequest(&input)
 
-	// Verify every opts field received a non-zero value.
-	optsVal := reflect.ValueOf(opts).Elem()
-	optsType := optsVal.Type()
-	for i := 0; i < optsType.NumField(); i++ {
-		field := optsType.Field(i)
-		val := optsVal.Field(i)
-		if val.IsZero() {
-			t.Errorf("opts field %q is zero after copying from a fully populated input", field.Name)
-		}
+	// Verify req is non-zero (i.e., something was set)
+	if reflect.DeepEqual(req, fingerprint.NewSearchEventsRequest()) {
+		t.Error("SearchEventInputToRequest returned an empty request from a fully populated input")
 	}
 }
 

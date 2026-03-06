@@ -5,10 +5,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -16,13 +15,14 @@ import (
 )
 
 const (
-	openapiURL                = "https://raw.githubusercontent.com/fingerprintjs/fingerprint-pro-server-api-openapi/refs/heads/main/schemas/fingerprint-server-api-for-sdks.yaml"
+	openapiSDKModule          = "github.com/fingerprintjs/go-sdk/v8"
+	openapiSpecFile           = "res/fingerprint-server-api-v4.yaml"
 	outputGoFile              = "internal/schema/schema_generated.go"
 	outputJSONFile            = "internal/schema/openapi_defs.json"
 	searchEventsInputJSONFile = "internal/schema/search_events_input.json"
 	productsFieldsJSONFile    = "internal/schema/products_fields.json"
 	// rootSchemas lists the OpenAPI schemas to include (with transitive dependencies)
-	rootSchemas = "EventsGetResponse,SearchEventsResponse"
+	rootSchemas = "Event,EventSearch"
 )
 
 func main() {
@@ -45,6 +45,19 @@ func main() {
 	// Clean up OpenAPI-specific fields and rewrite $refs
 	for name, schema := range collected {
 		collected[name] = cleanSchema(schema)
+	}
+
+	// Explicitly allow additional properties on all object schemas so that
+	// strict JSON Schema validators (used by the MCP framework) don't reject
+	// fields the SDK adds at runtime (e.g. new API fields).
+	for _, schema := range collected {
+		if m, ok := schema.(map[string]any); ok {
+			if t, _ := m["type"].(string); t == "object" {
+				if _, exists := m["additionalProperties"]; !exists {
+					m["additionalProperties"] = true
+				}
+			}
+		}
 	}
 
 	jsonBytes, err := json.MarshalIndent(collected, "", "  ")
@@ -117,19 +130,25 @@ var productsFields json.RawMessage
 }
 
 func downloadSpec() (map[string]any, error) {
-	resp, err := http.Get(openapiURL)
+	// Find the SDK module directory in the module cache
+	out, err := exec.Command("go", "list", "-m", "-json", openapiSDKModule).Output()
 	if err != nil {
-		return nil, fmt.Errorf("fetching OpenAPI spec: %w", err)
+		return nil, fmt.Errorf("finding SDK module: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d fetching OpenAPI spec", resp.StatusCode)
+	var modInfo struct {
+		Dir string `json:"Dir"`
+	}
+	if err := json.Unmarshal(out, &modInfo); err != nil {
+		return nil, fmt.Errorf("parsing module info: %w", err)
+	}
+	if modInfo.Dir == "" {
+		return nil, fmt.Errorf("SDK module directory not found; run 'go mod download' first")
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	specPath := modInfo.Dir + "/" + openapiSpecFile
+	body, err := os.ReadFile(specPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
+		return nil, fmt.Errorf("reading spec from %s: %w", specPath, err)
 	}
 
 	var spec map[string]any
@@ -152,24 +171,26 @@ func extractSchemas(spec map[string]any) map[string]any {
 	return schemas
 }
 
-// buildSearchEventsInputSchema extracts the parameters from the /events/search GET endpoint
+// buildSearchEventsInputSchema extracts the parameters from the /events GET endpoint
 // and converts them into a JSON Schema object.
 func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
+	schemas := extractSchemas(spec)
+
 	paths, ok := spec["paths"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("missing paths in spec")
 	}
-	eventsSearch, ok := paths["/events/search"].(map[string]any)
+	eventsSearch, ok := paths["/events"].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("missing /events/search path in spec")
+		return nil, fmt.Errorf("missing /events path in spec")
 	}
 	getOp, ok := eventsSearch["get"].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("missing GET operation on /events/search")
+		return nil, fmt.Errorf("missing GET operation on /events")
 	}
 	params, ok := getOp["parameters"].([]any)
 	if !ok {
-		return nil, fmt.Errorf("missing parameters on /events/search GET")
+		return nil, fmt.Errorf("missing parameters on /events GET")
 	}
 
 	properties := make(map[string]any)
@@ -189,9 +210,21 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 
 		// Copy the parameter's schema fields (type, format, enum, etc.)
 		if schema, ok := param["schema"].(map[string]any); ok {
+			// If schema is a $ref, resolve it by inlining the referenced schema
+			if ref, ok := schema["$ref"].(string); ok {
+				refName := extractSchemaName(ref)
+				if refName != "" && schemas != nil {
+					if resolved, ok := schemas[refName].(map[string]any); ok {
+						schema = resolved
+					}
+				}
+			}
 			for k, v := range schema {
 				if shouldRemoveField(k) {
 					continue
+				}
+				if k == "$ref" {
+					continue // skip any remaining $ref
 				}
 				if k == "format" {
 					if f, ok := v.(string); ok && isOpenAPIOnlyFormat(f) {
@@ -358,23 +391,46 @@ func isOpenAPIOnlyFormat(format string) bool {
 	return false
 }
 
-// extractProductsFields returns the sorted property names of the "Products" schema.
+// eventMetadataFields are Event properties that represent request metadata
+// rather than product/signal results. These are excluded from the product
+// field list used for filtering.
+var eventMetadataFields = map[string]bool{
+	"event_id":        true,
+	"timestamp":       true,
+	"linked_id":       true,
+	"environment_id":  true,
+	"suspect":         true,
+	"sdk":             true,
+	"replayed":        true,
+	"tags":            true,
+	"url":             true,
+	"bundle_id":       true,
+	"package_name":    true,
+	"ip_address":      true,
+	"user_agent":      true,
+	"client_referrer": true,
+}
+
+// extractProductsFields returns the sorted signal/product property names
+// of the "Event" schema, excluding metadata fields.
 func extractProductsFields(schemas map[string]any) []string {
-	products, ok := schemas["Products"]
+	event, ok := schemas["Event"]
 	if !ok {
 		return nil
 	}
-	pm, ok := products.(map[string]any)
+	em, ok := event.(map[string]any)
 	if !ok {
 		return nil
 	}
-	props, ok := pm["properties"].(map[string]any)
+	props, ok := em["properties"].(map[string]any)
 	if !ok {
 		return nil
 	}
 	fields := make([]string, 0, len(props))
 	for k := range props {
-		fields = append(fields, k)
+		if !eventMetadataFields[k] {
+			fields = append(fields, k)
+		}
 	}
 	sort.Strings(fields)
 	return fields
@@ -387,7 +443,7 @@ func generateSearchEventInputStruct(spec map[string]any) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("missing paths in spec")
 	}
-	eventsSearch, ok := paths["/events/search"].(map[string]any)
+	eventsSearch, ok := paths["/events"].(map[string]any)
 	if !ok {
 		return "", fmt.Errorf("missing /events/search path in spec")
 	}

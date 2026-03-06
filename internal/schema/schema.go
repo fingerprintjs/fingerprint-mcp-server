@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
+	"github.com/fingerprintjs/go-sdk/v8"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -118,11 +118,56 @@ func PatchProductsEnum(schema json.RawMessage) json.RawMessage {
 	return b
 }
 
-// FilterProducts nils out fields on the Products struct that are not in the
-// requested set. Since all Products fields are pointers tagged with omitempty,
+// productFieldNames returns the set of JSON field names that are considered
+// "product" fields on the Event struct, loaded from the embedded productsFields JSON.
+func productFieldNames() map[string]bool {
+	var fields []string
+	if err := json.Unmarshal(productsFields, &fields); err != nil {
+		panic(fmt.Sprintf("productFieldNames: unmarshal: %v", err))
+	}
+	m := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		m[f] = true
+	}
+	return m
+}
+
+// StripAdditionalProperties nils out the AdditionalProperties map on the given
+// struct (and any nested structs) so that serialized JSON won't contain extra
+// keys that violate "additionalProperties: false" in the schema.
+func StripAdditionalProperties(v any) {
+	stripAdditionalProperties(reflect.ValueOf(v))
+}
+
+func stripAdditionalProperties(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Ptr:
+		if !v.IsNil() {
+			stripAdditionalProperties(v.Elem())
+		}
+	case reflect.Struct:
+		t := v.Type()
+		for i := 0; i < t.NumField(); i++ {
+			f := v.Field(i)
+			if t.Field(i).Name == "AdditionalProperties" && f.Kind() == reflect.Map {
+				f.Set(reflect.Zero(f.Type()))
+				continue
+			}
+			stripAdditionalProperties(f)
+		}
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			stripAdditionalProperties(v.Index(i))
+		}
+	}
+}
+
+// FilterProducts nils out product-related fields on the Event struct that are not
+// in the requested set. Non-product metadata fields (event_id, timestamp, etc.)
+// are never touched. Since product fields are pointers tagged with omitempty,
 // nilled fields are omitted from the JSON output automatically.
-func FilterProducts(p *sdk.Products, fields []string) {
-	if p == nil || len(fields) == 0 {
+func FilterProducts(event *fingerprint.Event, fields []string) {
+	if event == nil || len(fields) == 0 {
 		return
 	}
 
@@ -131,10 +176,15 @@ func FilterProducts(p *sdk.Products, fields []string) {
 		allowed[f] = true
 	}
 
-	v := reflect.ValueOf(p).Elem()
+	productFields := productFieldNames()
+
+	v := reflect.ValueOf(event).Elem()
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
 		jsonName := strings.SplitN(t.Field(i).Tag.Get("json"), ",", 2)[0]
+		if !productFields[jsonName] {
+			continue // not a product field, skip
+		}
 		if !allowed[jsonName] {
 			v.Field(i).Set(reflect.Zero(t.Field(i).Type))
 		}
@@ -161,21 +211,128 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 	}
 }
 
-// SearchEventInputToOpts copies matching fields from SearchEventInput to
-// sdk.FingerprintApiSearchEventsOpts using reflection. Fields like Limit and
-// Products that exist only in SearchEventInput are skipped automatically.
-func SearchEventInputToOpts(input *SearchEventInput) *sdk.FingerprintApiSearchEventsOpts {
-	opts := &sdk.FingerprintApiSearchEventsOpts{}
-	src := reflect.ValueOf(input).Elem()
-	dst := reflect.ValueOf(opts).Elem()
-	for i := 0; i < dst.NumField(); i++ {
-		name := dst.Type().Field(i).Name
-		srcField := src.FieldByName(name)
-		if srcField.IsValid() && srcField.Type().AssignableTo(dst.Field(i).Type()) {
-			dst.Field(i).Set(srcField)
-		}
+// SearchEventInputToRequest converts a SearchEventInput into a fingerprint.SearchEventRequest
+// using the builder pattern.
+func SearchEventInputToRequest(input *SearchEventInput) fingerprint.SearchEventRequest {
+	req := fingerprint.NewSearchEventsRequest()
+	if input.Limit != nil {
+		req = req.Limit(*input.Limit)
 	}
-	return opts
+	if input.PaginationKey != nil {
+		req = req.PaginationKey(*input.PaginationKey)
+	}
+	if input.VisitorId != nil {
+		req = req.VisitorID(*input.VisitorId)
+	}
+	if s, ok := input.Bot.(string); ok {
+		req = req.Bot(fingerprint.SearchEventsBot(s))
+	}
+	if input.IpAddress != nil {
+		req = req.IPAddress(*input.IpAddress)
+	}
+	if input.Asn != nil {
+		req = req.Asn(*input.Asn)
+	}
+	if input.LinkedId != nil {
+		req = req.LinkedID(*input.LinkedId)
+	}
+	if input.Url != nil {
+		req = req.URL(*input.Url)
+	}
+	if input.BundleId != nil {
+		req = req.BundleID(*input.BundleId)
+	}
+	if input.PackageName != nil {
+		req = req.PackageName(*input.PackageName)
+	}
+	if input.Origin != nil {
+		req = req.Origin(*input.Origin)
+	}
+	if input.Start != nil {
+		req = req.Start(*input.Start)
+	}
+	if input.End != nil {
+		req = req.End(*input.End)
+	}
+	if input.Reverse != nil {
+		req = req.Reverse(*input.Reverse)
+	}
+	if input.Suspect != nil {
+		req = req.Suspect(*input.Suspect)
+	}
+	if input.Vpn != nil {
+		req = req.VPN(*input.Vpn)
+	}
+	if input.VirtualMachine != nil {
+		req = req.VirtualMachine(*input.VirtualMachine)
+	}
+	if input.Tampering != nil {
+		req = req.Tampering(*input.Tampering)
+	}
+	if input.AntiDetectBrowser != nil {
+		req = req.AntiDetectBrowser(*input.AntiDetectBrowser)
+	}
+	if input.Incognito != nil {
+		req = req.Incognito(*input.Incognito)
+	}
+	if input.PrivacySettings != nil {
+		req = req.PrivacySettings(*input.PrivacySettings)
+	}
+	if input.Jailbroken != nil {
+		req = req.Jailbroken(*input.Jailbroken)
+	}
+	if input.Frida != nil {
+		req = req.Frida(*input.Frida)
+	}
+	if input.FactoryReset != nil {
+		req = req.FactoryReset(*input.FactoryReset)
+	}
+	if input.ClonedApp != nil {
+		req = req.ClonedApp(*input.ClonedApp)
+	}
+	if input.Emulator != nil {
+		req = req.Emulator(*input.Emulator)
+	}
+	if input.RootApps != nil {
+		req = req.RootApps(*input.RootApps)
+	}
+	if s, ok := input.VpnConfidence.(string); ok {
+		req = req.VPNConfidence(fingerprint.SearchEventsVPNConfidence(s))
+	}
+	if input.MinSuspectScore != nil {
+		req = req.MinSuspectScore(*input.MinSuspectScore)
+	}
+	if input.DeveloperTools != nil {
+		req = req.DeveloperTools(*input.DeveloperTools)
+	}
+	if input.LocationSpoofing != nil {
+		req = req.LocationSpoofing(*input.LocationSpoofing)
+	}
+	if input.MitmAttack != nil {
+		req = req.MITMAttack(*input.MitmAttack)
+	}
+	if input.Proxy != nil {
+		req = req.Proxy(*input.Proxy)
+	}
+	if input.SdkVersion != nil {
+		req = req.SDKVersion(*input.SdkVersion)
+	}
+	if s, ok := input.SdkPlatform.(string); ok {
+		req = req.SDKPlatform(fingerprint.SearchEventsSDKPlatform(s))
+	}
+	if len(input.Environment) > 0 {
+		req = req.Environment(input.Environment)
+	}
+	if input.ProximityId != nil {
+		req = req.ProximityID(*input.ProximityId)
+	}
+	if input.TotalHits != nil {
+		req = req.TotalHits(*input.TotalHits)
+	}
+	if input.TorNode != nil {
+		req = req.TorNode(*input.TorNode)
+	}
+	return req
 }
 
 func MustInferSchema[T any]() json.RawMessage {

@@ -2,11 +2,15 @@
   "additionalProperties": false,
   "properties": {
     "anti_detect_browser": {
-      "description": "Filter events by Anti-detect Browser Detection result.\n\u003e Note: When using this parameter, only events with the `products.tampering.data.antiDetectBrowser` property set to `true` or `false` are returned. Events without a `products.tampering` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Anti-detect Browser Detection result.\n\u003e Note: When using this parameter, only events with the `tampering.anti_detect_browser` property set to `true` or `false` are returned. Events without a `tampering` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
+    "asn": {
+      "description": "Filter events by the ASN associated with the event's IP address.\nThis corresponds to the `ip_info.(v4|v6).asn` property in the response.\n",
+      "type": "string"
+    },
     "bot": {
-      "description": "Filter events by the Bot Detection result, specifically:\n  `all` - events where any kind of bot was detected.\n  `good` - events where a good bot was detected.\n  `bad` - events where a bad bot was detected.\n  `none` - events where no bot was detected.\n\u003e Note: When using this parameter, only events with the `products.botd.data.bot.result` property set to a valid value are returned. Events without a `products.botd` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by the Bot Detection result, specifically:\n  `all` - events where any kind of bot was detected.\n  `good` - events where a good bot was detected.\n  `bad` - events where a bad bot was detected.\n  `none` - events where no bot was detected.\n\u003e Note: When using this parameter, only events with the `bot` property set to a valid value are returned. Events without a `bot` Smart Signal result are left out of the response.\n",
       "enum": [
         "all",
         "good",
@@ -15,20 +19,20 @@
       ],
       "type": "string"
     },
-    "cloned_app": {
-      "description": "Filter events by Cloned App Detection result.\n\u003e Note: When using this parameter, only events with the `products.clonedApp.data.result` property set to `true` or `false` are returned. Events without a `products.clonedApp` Smart Signal result are left out of the response.\n",
-      "type": "boolean"
+    "bundle_id": {
+      "description": "Filter events by the Bundle ID (iOS) associated with the event.\n",
+      "type": "string"
     },
-    "datacenter": {
-      "description": "Filter events by Datacenter Detection result.\n\u003e Note: When using this parameter, only events with the `products.ipInfo.data.v4.datacenter.result` or `products.ipInfo.data.v6.datacenter.result` property set to `true` or `false` are returned. Events without a `products.ipInfo` Smart Signal result are left out of the response.\n",
+    "cloned_app": {
+      "description": "Filter events by Cloned App Detection result.\n\u003e Note: When using this parameter, only events with the `cloned_app` property set to `true` or `false` are returned. Events without a `cloned_app` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "developer_tools": {
-      "description": "Filter events by Developer Tools detection result.\n\u003e Note: When using this parameter, only events with the `products.developerTools.data.result` property set to `true` or `false` are returned. Events without a `products.developerTools` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Developer Tools detection result.\n\u003e Note: When using this parameter, only events with the `developer_tools` property set to `true` or `false` are returned. Events without a `developer_tools` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "emulator": {
-      "description": "Filter events by Android Emulator Detection result.\n\u003e Note: When using this parameter, only events with the `products.emulator.data.result` property set to `true` or `false` are returned. Events without a `products.emulator` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Android Emulator Detection result.\n\u003e Note: When using this parameter, only events with the `emulator` property set to `true` or `false` are returned. Events without an `emulator` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "end": {
@@ -36,86 +40,77 @@
       "type": "integer"
     },
     "environment": {
-      "description": "Filter for events by providing one or more environment IDs.\n",
+      "description": "Filter for events by providing one or more environment IDs (`environment_id` property).\n",
       "items": {
         "type": "string"
       },
       "type": "array"
     },
     "factory_reset": {
-      "description": "Filter events by Factory Reset Detection result.\n\u003e Note: When using this parameter, only events with the `products.factoryReset.data.result` property set to `true` or `false` are returned. Events without a `products.factoryReset` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Factory Reset Detection result.\n\u003e Note: When using this parameter, only events with a `factory_reset` time. Events without a `factory_reset` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "frida": {
-      "description": "Filter events by Frida Detection result.\n\u003e Note: When using this parameter, only events with the `products.frida.data.result` property set to `true` or `false` are returned. Events without a `products.frida` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Frida Detection result.\n\u003e Note: When using this parameter, only events with the `frida` property set to `true` or `false` are returned. Events without a `frida` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "incognito": {
-      "description": "Filter events by Browser Incognito Detection result.\n\u003e Note: When using this parameter, only events with the `products.incognito.data.result` property set to `true` or `false` are returned. Events without a `products.incognito` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Browser Incognito Detection result.\n\u003e Note: When using this parameter, only events with the `incognito` property set to `true` or `false` are returned. Events without an `incognito` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "ip_address": {
-      "description": "Filter events by IP address range. The range can be as specific as a single IP (/32 for IPv4 or /128 for IPv6)\nAll ip_address filters must use CIDR notation, for example, 10.0.0.0/24, 192.168.0.1/32\n",
+      "description": "Filter events by IP address or IP range (if CIDR notation is used). If CIDR notation is not used, a /32 for IPv4 or /128 for IPv6 is assumed.\nExamples of range based queries: 10.0.0.0/24, 192.168.0.1/32\n",
       "type": "string"
     },
-    "ip_blocklist": {
-      "description": "Filter events by IP Blocklist Detection result.\n\u003e Note: When using this parameter, only events with the `products.ipBlocklist.data.result` property set to `true` or `false` are returned. Events without a `products.ipBlocklist` Smart Signal result are left out of the response.\n",
-      "type": "boolean"
-    },
     "jailbroken": {
-      "description": "Filter events by Jailbroken Device Detection result.\n\u003e Note: When using this parameter, only events with the `products.jailbroken.data.result` property set to `true` or `false` are returned. Events without a `products.jailbroken` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Jailbroken Device Detection result.\n\u003e Note: When using this parameter, only events with the `jailbroken` property set to `true` or `false` are returned. Events without a `jailbroken` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "limit": {
+      "default": 10,
       "description": "Limit the number of events returned.\n",
+      "maximum": 100,
       "minimum": 1,
       "type": "integer"
     },
     "linked_id": {
-      "description": "Filter events by your custom identifier.\n\nYou can use [linked IDs](https://dev.fingerprint.com/reference/get-function#linkedid) to associate identification requests with your own identifier, for example, session ID, purchase ID, or transaction ID. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
+      "description": "Filter events by your custom identifier.\n\nYou can use [linked Ids](https://dev.fingerprint.com/reference/get-function#linkedid) to associate identification requests with your own identifier, for example, session Id, purchase Id, or transaction Id. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
       "type": "string"
     },
     "location_spoofing": {
-      "description": "Filter events by Location Spoofing detection result.\n\u003e Note: When using this parameter, only events with the `products.locationSpoofing.data.result` property set to `true` or `false` are returned. Events without a `products.locationSpoofing` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Location Spoofing detection result.\n\u003e Note: When using this parameter, only events with the `location_spoofing` property set to `true` or `false` are returned. Events without a `location_spoofing` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "min_suspect_score": {
-      "description": "Filter events with Suspect Score result above a provided minimum threshold.\n\u003e Note: When using this parameter, only events where the `products.suspectScore.data.result` property set to a value exceeding your threshold are returned. Events without a `products.suspectScore` Smart Signal result are left out of the response.\n",
+      "description": "Filter events with Suspect Score result above a provided minimum threshold.\n\u003e Note: When using this parameter, only events where the `suspect_score` property set to a value exceeding your threshold are returned. Events without a `suspect_score` Smart Signal result are left out of the response.\n",
       "type": "number"
     },
     "mitm_attack": {
-      "description": "Filter events by MITM (Man-in-the-Middle) Attack detection result.\n\u003e Note: When using this parameter, only events with the `products.mitmAttack.data.result` property set to `true` or `false` are returned. Events without a `products.mitmAttack` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by MITM (Man-in-the-Middle) Attack detection result.\n\u003e Note: When using this parameter, only events with the `mitm_attack` property set to `true` or `false` are returned. Events without a `mitm_attack` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
+    "origin": {
+      "description": "Filter events by the origin field of the event. This is applicable to web events only (e.g., https://example.com)\n",
+      "type": "string"
+    },
+    "package_name": {
+      "description": "Filter events by the Package Name (Android) associated with the event.\n",
+      "type": "string"
+    },
     "pagination_key": {
-      "description": "Use `pagination_key` to get the next page of results.\n\nWhen more results are available (e.g., you requested up to 200 results for your search using `limit`, but there are more than 200 events total matching your request), the `paginationKey` top-level attribute is added to the response. The key corresponds to the `timestamp` of the last returned event. In the following request, use that value in the `pagination_key` parameter to get the next page of results:\n\n1. First request, returning most recent 200 events: `GET api-base-url/events/search?limit=200`\n2. Use `response.paginationKey` to get the next page of results: `GET api-base-url/events/search?limit=200\u0026pagination_key=1740815825085`\n",
+      "description": "Use `pagination_key` to get the next page of results.\n\nWhen more results are available (e.g., you requested up to 100 results for your query using `limit`, but there are more than 100 events total matching your request), the `pagination_key` field is added to the response. The pagination key is an arbitrary string that should not be interpreted in any way and should be passed as-is. In the following request, use that value in the `pagination_key` parameter to get the next page of results:\n\n1. First request, returning most recent 200 events: `GET api-base-url/events?limit=100`\n2. Use `response.pagination_key` to get the next page of results: `GET api-base-url/events?limit=100\u0026pagination_key=1740815825085`\n",
       "type": "string"
     },
     "privacy_settings": {
-      "description": "Filter events by Privacy Settings Detection result.\n\u003e Note: When using this parameter, only events with the `products.privacySettings.data.result` property set to `true` or `false` are returned. Events without a `products.privacySettings` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Privacy Settings Detection result.\n\u003e Note: When using this parameter, only events with the `privacy_settings` property set to `true` or `false` are returned. Events without a `privacy_settings` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "proximity_id": {
-      "description": "Filter events by the most precise Proximity ID provided by default.\n\u003e Note: When using this parameter, only events with the `products.proximity.id` property matching the provided ID are returned. Events without a `products.proximity` result are left out of the response.\n",
+      "description": "Filter events by the most precise Proximity ID provided by default.\n\u003e Note: When using this parameter, only events with the `proximity.id` property matching the provided ID are returned. Events without a `proximity` result are left out of the response.\n",
       "type": "string"
     },
-    "proximity_precision_radius": {
-      "description": "Filter events by Proximity Radius.\n\u003e Note: When using this parameter, only events with the `products.proximity.precisionRadius` property set to a valid value are returned. Events without a `products.proximity` result are left out of the response.\n",
-      "enum": [
-        10,
-        25,
-        65,
-        175,
-        450,
-        1200,
-        3300,
-        8500,
-        22500
-      ],
-      "type": "integer"
-    },
     "proxy": {
-      "description": "Filter events by Proxy detection result.\n\u003e Note: When using this parameter, only events with the `products.proxy.data.result` property set to `true` or `false` are returned. Events without a `products.proxy` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Proxy detection result.\n\u003e Note: When using this parameter, only events with the `proxy` property set to `true` or `false` are returned. Events without a `proxy` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "reverse": {
@@ -123,11 +118,11 @@
       "type": "boolean"
     },
     "root_apps": {
-      "description": "Filter events by Rooted Device Detection result.\n\u003e Note: When using this parameter, only events with the `products.rootApps.data.result` property set to `true` or `false` are returned. Events without a `products.rootApps` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Rooted Device Detection result.\n\u003e Note: When using this parameter, only events with the `root_apps` property set to `true` or `false` are returned. Events without a `root_apps` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "sdk_platform": {
-      "description": "Filter events by the SDK Platform associated with the identification event.\n`js` - JavaScript agent (Web).\n`ios` - Apple iOS based devices.\n`android` - Android based devices.\n",
+      "description": "Filter events by the SDK Platform associated with the identification event (`sdk.platform` property) .\n`js` - Javascript agent (Web).\n`ios` - Apple iOS based devices.\n`android` - Android based devices.\n",
       "enum": [
         "js",
         "android",
@@ -136,7 +131,7 @@
       "type": "string"
     },
     "sdk_version": {
-      "description": "Filter events by a specific SDK version associated with the identification event. Example: `3.11.14`\n",
+      "description": "Filter events by a specific SDK version associated with the identification event (`sdk.version` property). Example: `3.11.14`\n",
       "type": "string"
     },
     "start": {
@@ -148,11 +143,25 @@
       "type": "boolean"
     },
     "tampering": {
-      "description": "Filter events by Tampering Detection result.\n\u003e Note: When using this parameter, only events with the `products.tampering.data.result` property set to `true` or `false` are returned. Events without a `products.tampering` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Browser Tampering Detection result.\n\u003e Note: When using this parameter, only events with the `tampering.result` property set to `true` or `false` are returned. Events without a `tampering` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
+    "tor_node": {
+      "description": "Filter events by Tor Node detection result.\n\u003e Note: When using this parameter, only events with the `tor_node` property set to `true` or `false` are returned. Events without a `tor_node` detection result are left out of the response.\n",
+      "type": "boolean"
+    },
+    "total_hits": {
+      "description": "When set, the response will include a `total_hits` property with a count of total query matches across all pages, up to the specified limit.\n",
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "url": {
+      "description": "Filter events by the URL (`url` property) associated with the event.\n",
+      "type": "string"
+    },
     "virtual_machine": {
-      "description": "Filter events by Virtual Machine Detection result.\n\u003e Note: When using this parameter, only events with the `products.virtualMachine.data.result` property set to `true` or `false` are returned. Events without a `products.virtualMachine` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Virtual Machine Detection result.\n\u003e Note: When using this parameter, only events with the `virtual_machine` property set to `true` or `false` are returned. Events without a `virtual_machine` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "visitor_id": {
@@ -160,11 +169,11 @@
       "type": "string"
     },
     "vpn": {
-      "description": "Filter events by VPN Detection result.\n\u003e Note: When using this parameter, only events with the `products.vpn.data.result` property set to `true` or `false` are returned. Events without a `products.vpn` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by VPN Detection result.\n\u003e Note: When using this parameter, only events with the `vpn` property set to `true` or `false` are returned. Events without a `vpn` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
     "vpn_confidence": {
-      "description": "Filter events by VPN Detection result confidence level.\n`high` - events with high VPN Detection confidence.\n`medium` - events with medium VPN Detection confidence.\n`low` - events with low VPN Detection confidence.\n\u003e Note: When using this parameter, only events with the `products.vpn.data.confidence` property set to a valid value are returned. Events without a `products.vpn` Smart Signal result are left out of the response.\n",
+      "description": "Filter events by VPN Detection result confidence level.\n`high` - events with high VPN Detection confidence.\n`medium` - events with medium VPN Detection confidence.\n`low` - events with low VPN Detection confidence.\n\u003e Note: When using this parameter, only events with the `vpn.confidence` property set to a valid value are returned. Events without a `vpn` Smart Signal result are left out of the response.\n",
       "enum": [
         "high",
         "medium",
@@ -173,8 +182,5 @@
       "type": "string"
     }
   },
-  "required": [
-    "limit"
-  ],
   "type": "object"
 }

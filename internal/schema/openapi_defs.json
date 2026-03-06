@@ -1,84 +1,84 @@
 {
-  "Botd": {
-    "additionalProperties": false,
-    "description": "Contains all the information from Bot Detection product",
+  "Architecture": {
+    "description": "Integer representing the CPU architecture exposed by the browser.",
+    "type": "integer"
+  },
+  "Audio": {
+    "description": "AudioContext fingerprint or negative status when unavailable. The negative statuses can be: - -1: A permanent status for those browsers which are known to always suspend audio context - -2: A permanent status for browsers that don't support the signal - -3: A temporary status that means that an unexpected timeout has happened\n",
+    "type": "number"
+  },
+  "BotInfo": {
+    "additionalProperties": true,
+    "description": "Extended bot information.",
     "properties": {
-      "bot": {
-        "$ref": "#/$defs/BotdBot"
-      },
-      "ip": {
-        "description": "IP address of the requesting browser or bot.",
+      "category": {
+        "description": "The type and purpose of the bot.",
         "type": "string"
       },
-      "linkedId": {
-        "description": "A customer-provided id that was sent with the request.",
+      "confidence": {
+        "description": "Confidence level of the bot identification.",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
         "type": "string"
       },
-      "meta": {
-        "$ref": "#/$defs/Tag"
-      },
-      "requestId": {
-        "description": "Unique identifier of the user's request.",
+      "identity": {
+        "description": "The verification status of the bot's identity:\n * `verified` - well-known bot with publicly verifiable identity, directed by the bot provider.\n * `signed` - bot that signs its platform via Web Bot Auth, directed by the bot provider’s customers.\n * `spoofed` - bot that claims a public identity but fails verification.\n * `unknown` - bot that does not publish a verifiable identity.\n",
+        "enum": [
+          "verified",
+          "signed",
+          "spoofed",
+          "unknown"
+        ],
         "type": "string"
       },
-      "time": {
-        "description": "Time in UTC when the request from the JS agent was made. We recommend to treat requests that are older than 2 minutes as malicious. Otherwise, request replay attacks are possible.",
-        "format": "date-time",
+      "name": {
+        "description": "The specific name or identifier of the bot.",
         "type": "string"
       },
-      "url": {
-        "description": "Page URL from which the request was sent.",
+      "provider": {
+        "description": "The organization or company operating the bot.",
         "type": "string"
       },
-      "userAgent": {
+      "provider_url": {
+        "description": "The URL of the bot provider's website.",
         "type": "string"
       }
     },
     "required": [
-      "bot",
-      "url",
-      "ip",
-      "time",
-      "userAgent",
-      "requestId"
+      "category",
+      "provider",
+      "name",
+      "identity",
+      "confidence"
     ],
     "type": "object"
   },
-  "BotdBot": {
-    "additionalProperties": false,
-    "description": "Stores bot detection result",
-    "properties": {
-      "result": {
-        "$ref": "#/$defs/BotdBotResult"
-      },
-      "type": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
-  },
-  "BotdBotResult": {
-    "description": "Bot detection result:\n * `notDetected` - the visitor is not a bot\n * `good` - good bot detected, such as Google bot, Baidu Spider, AlexaBot and so on\n * `bad` - bad bot detected, such as Selenium, Puppeteer, Playwright, headless browsers, and so on\n",
+  "BotResult": {
+    "description": "Bot detection result:\n * `bad` - bad bot detected, such as Selenium, Puppeteer, Playwright, headless browsers, and so on\n * `good` - good bot detected, such as Google bot, Baidu Spider, AlexaBot and so on\n * `not_detected` - the visitor is not a bot\n",
     "enum": [
-      "notDetected",
+      "bad",
       "good",
-      "bad"
+      "not_detected"
     ],
     "type": "string"
   },
+  "BotType": {
+    "description": "Additional classification of the bot type if detected.\n",
+    "type": "string"
+  },
   "BrowserDetails": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
-      "browserFullVersion": {
+      "browser_full_version": {
         "type": "string"
       },
-      "browserMajorVersion": {
+      "browser_major_version": {
         "type": "string"
       },
-      "browserName": {
+      "browser_name": {
         "type": "string"
       },
       "device": {
@@ -87,199 +87,461 @@
       "os": {
         "type": "string"
       },
-      "osVersion": {
-        "type": "string"
-      },
-      "userAgent": {
+      "os_version": {
         "type": "string"
       }
     },
     "required": [
-      "browserName",
-      "browserFullVersion",
-      "browserMajorVersion",
+      "browser_name",
+      "browser_full_version",
+      "browser_major_version",
       "os",
-      "osVersion",
-      "device",
-      "userAgent"
+      "os_version",
+      "device"
     ],
     "type": "object"
+  },
+  "BundleId": {
+    "description": "Bundle Id of the iOS application integrated with the Fingerprint SDK for the event. For example: `com.foo.app`\n",
+    "type": "string"
+  },
+  "Canvas": {
+    "additionalProperties": true,
+    "description": "Canvas fingerprint containing winding flag plus geometry/text hashes.",
+    "properties": {
+      "geometry": {
+        "description": "Hash of geometry rendering output or `unsupported` markers.",
+        "type": "string"
+      },
+      "text": {
+        "description": "Hash of text rendering output or `unsupported` markers.",
+        "type": "string"
+      },
+      "winding": {
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "ClientReferrer": {
+    "description": "Client Referrer field corresponds to the `document.referrer` field gathered during an identification request. The value is an empty string if the user navigated to the page directly (not through a link, but, for example, by using a bookmark) For example: `https://example.com/blog/my-article`\n",
+    "type": "string"
   },
   "ClonedApp": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "Android specific cloned application detection. There are 2 values: \n  * `true` - Presence of app cloners work detected (e.g. fully cloned application found or launch of it inside of a not main working profile detected).\n  * `false` - No signs of cloned application detected or the client is not Android.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "description": "Android specific cloned application detection. There are 2 values:  * `true` - Presence of app cloners work detected (e.g. fully cloned application found or launch of it inside of a not main working profile detected). * `false` - No signs of cloned application detected or the client is not Android.\n",
+    "type": "boolean"
   },
-  "DeprecatedGeolocation": {
-    "additionalProperties": false,
-    "description": "This field is **deprecated** and will not return a result for **applications created after January 23rd, 2024**.  Please use the [IP Geolocation Smart signal](https://dev.fingerprint.com/docs/smart-signals-overview#ip-geolocation) for geolocation information.",
-    "properties": {
-      "accuracyRadius": {
-        "description": "The IP address is likely to be within this radius (in km) of the specified location.",
-        "minimum": 0,
-        "type": "integer"
-      },
-      "city": {
-        "$ref": "#/$defs/GeolocationCity"
-      },
-      "continent": {
-        "$ref": "#/$defs/GeolocationContinent"
-      },
-      "country": {
-        "$ref": "#/$defs/GeolocationCountry"
-      },
-      "latitude": {
-        "maximum": 90,
-        "minimum": -90,
-        "type": "number"
-      },
-      "longitude": {
-        "maximum": 180,
-        "minimum": -180,
-        "type": "number"
-      },
-      "postalCode": {
-        "type": "string"
-      },
-      "subdivisions": {
-        "$ref": "#/$defs/GeolocationSubdivisions"
-      },
-      "timezone": {
-        "type": "string"
-      }
-    },
-    "type": "object"
+  "ColorDepth": {
+    "description": "Screen color depth in bits.",
+    "type": "integer"
+  },
+  "CookiesEnabled": {
+    "description": "Whether the cookies are enabled in the browser.",
+    "type": "boolean"
+  },
+  "DateTimeLocale": {
+    "description": "Locale derived from the Intl.DateTimeFormat API. Negative values indicate known error states. The negative statuses can be: - \"-1\": A permanent status for browsers that don't support Intl API. - \"-2\": A permanent status for browsers that don't supportDateTimeFormat constructor. - \"-3\": A permanent status for browsers in which DateTimeFormat locale is undefined or null.\n",
+    "type": "string"
   },
   "DeveloperTools": {
-    "additionalProperties": false,
+    "description": "`true` if the browser is Chrome with DevTools open or Firefox with Developer Tools open, `false` otherwise.\n",
+    "type": "boolean"
+  },
+  "DeviceMemory": {
+    "description": "Rounded amount of RAM (in gigabytes) reported by the browser.",
+    "minimum": 0,
+    "type": "integer"
+  },
+  "Emoji": {
+    "additionalProperties": true,
+    "description": "Bounding box metrics describing how the emoji glyph renders.",
     "properties": {
-      "result": {
-        "description": "`true` if the browser is Chrome with DevTools open or Firefox with Developer Tools open, `false` otherwise.\n",
-        "type": "boolean"
+      "bottom": {
+        "type": "number"
+      },
+      "font": {
+        "description": "Font family reported by the browser when drawing the emoji.",
+        "type": "string"
+      },
+      "height": {
+        "type": "number"
+      },
+      "left": {
+        "type": "number"
+      },
+      "right": {
+        "type": "number"
+      },
+      "top": {
+        "type": "number"
+      },
+      "width": {
+        "type": "number"
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
       }
     },
-    "required": [
-      "result"
-    ],
     "type": "object"
   },
   "Emulator": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "Android specific emulator detection. There are 2 values: \n  * `true` - Emulated environment detected (e.g. launch inside of AVD). \n  * `false` - No signs of emulated environment detected or the client is not Android.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "description": "Android specific emulator detection. There are 2 values: \n* `true` - Emulated environment detected (e.g. launch inside of AVD). \n* `false` - No signs of emulated environment detected or the client is not Android.\n",
+    "type": "boolean"
   },
-  "Error": {
-    "additionalProperties": false,
-    "properties": {
-      "code": {
-        "$ref": "#/$defs/ErrorCode"
-      },
-      "message": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "code",
-      "message"
-    ],
-    "type": "object"
-  },
-  "ErrorCode": {
-    "description": "Error code:\n * `RequestCannotBeParsed` - the query parameters or JSON payload contains some errors \n          that prevented us from parsing it (wrong type/surpassed limits).\n * `TokenRequired` - `Auth-API-Key` header is missing or empty.\n * `TokenNotFound` - no Fingerprint application found for specified secret key.\n * `SubscriptionNotActive` - Fingerprint application is not active.\n * `WrongRegion` - server and application region differ.\n * `FeatureNotEnabled` - this feature (for example, Delete API) is not enabled for your application.\n * `WorkspaceScopedSecretKeyRequired` - The provided secret API key is scoped to an environment, but this operation requires a workspace-scoped secret API key.\n * `RequestNotFound` - the specified request ID was not found. It never existed, expired, or it has been deleted.\n * `VisitorNotFound` - The specified visitor ID was not found. It never existed or it may have already been deleted.\n * `TooManyRequests` - the limit on secret API key requests per second has been exceeded.\n * `429 Too Many Requests` - the limit on secret API key requests per second has been exceeded.\n * `StateNotReady` - The event specified with request id is\n          not ready for updates yet. Try again.\n          This error happens in rare cases when update API is called immediately\n          after receiving the request id on the client. In case you need to send\n          information right away, we recommend using the JS agent API instead.\n * `Failed` - internal server error.\n",
-    "enum": [
-      "RequestCannotBeParsed",
-      "TokenRequired",
-      "TokenNotFound",
-      "SubscriptionNotActive",
-      "WrongRegion",
-      "FeatureNotEnabled",
-      "WorkspaceScopedSecretKeyRequired",
-      "RequestNotFound",
-      "VisitorNotFound",
-      "TooManyRequests",
-      "429 Too Many Requests",
-      "StateNotReady",
-      "Failed"
-    ],
+  "EnvironmentId": {
+    "description": "Environment Id of the event. For example: `ae_47abaca3db2c7c43`\n",
     "type": "string"
   },
-  "EventsGetResponse": {
-    "additionalProperties": false,
+  "Event": {
+    "additionalProperties": true,
     "description": "Contains results from Fingerprint Identification and all active Smart Signals.",
     "properties": {
-      "products": {
-        "$ref": "#/$defs/Products"
-      }
-    },
-    "required": [
-      "products"
-    ],
-    "type": "object"
-  },
-  "FactoryReset": {
-    "additionalProperties": false,
-    "properties": {
-      "time": {
-        "description": "Indicates the time (in UTC) of the most recent factory reset that happened on the **mobile device**. \nWhen a factory reset cannot be detected on the mobile device or when the request is initiated from a browser,  this field will correspond to the *epoch* time (i.e 1 Jan 1970 UTC).\nSee [Factory Reset Detection](https://dev.fingerprint.com/docs/smart-signals-overview#factory-reset-detection) to learn more about this Smart Signal.\n",
-        "format": "date-time",
-        "type": "string"
+      "bot": {
+        "$ref": "#/$defs/BotResult"
+      },
+      "bot_info": {
+        "$ref": "#/$defs/BotInfo"
+      },
+      "bot_type": {
+        "$ref": "#/$defs/BotType"
+      },
+      "browser_details": {
+        "$ref": "#/$defs/BrowserDetails"
+      },
+      "bundle_id": {
+        "$ref": "#/$defs/BundleId"
+      },
+      "client_referrer": {
+        "$ref": "#/$defs/ClientReferrer"
+      },
+      "cloned_app": {
+        "$ref": "#/$defs/ClonedApp"
+      },
+      "developer_tools": {
+        "$ref": "#/$defs/DeveloperTools"
+      },
+      "emulator": {
+        "$ref": "#/$defs/Emulator"
+      },
+      "environment_id": {
+        "$ref": "#/$defs/EnvironmentId"
+      },
+      "event_id": {
+        "$ref": "#/$defs/EventId"
+      },
+      "factory_reset_timestamp": {
+        "$ref": "#/$defs/FactoryReset"
+      },
+      "frida": {
+        "$ref": "#/$defs/Frida"
+      },
+      "high_activity_device": {
+        "$ref": "#/$defs/HighActivity"
+      },
+      "identification": {
+        "$ref": "#/$defs/Identification"
+      },
+      "incognito": {
+        "$ref": "#/$defs/Incognito"
+      },
+      "ip_address": {
+        "$ref": "#/$defs/IpAddress"
+      },
+      "ip_blocklist": {
+        "$ref": "#/$defs/IPBlockList"
+      },
+      "ip_info": {
+        "$ref": "#/$defs/IPInfo"
+      },
+      "jailbroken": {
+        "$ref": "#/$defs/Jailbroken"
+      },
+      "linked_id": {
+        "$ref": "#/$defs/LinkedId"
+      },
+      "location_spoofing": {
+        "$ref": "#/$defs/LocationSpoofing"
+      },
+      "mitm_attack": {
+        "$ref": "#/$defs/MitMAttack"
+      },
+      "package_name": {
+        "$ref": "#/$defs/PackageName"
+      },
+      "privacy_settings": {
+        "$ref": "#/$defs/PrivacySettings"
+      },
+      "proximity": {
+        "$ref": "#/$defs/Proximity"
+      },
+      "proxy": {
+        "$ref": "#/$defs/Proxy"
+      },
+      "proxy_confidence": {
+        "$ref": "#/$defs/ProxyConfidence"
+      },
+      "proxy_details": {
+        "$ref": "#/$defs/ProxyDetails"
+      },
+      "raw_device_attributes": {
+        "$ref": "#/$defs/RawDeviceAttributes"
+      },
+      "replayed": {
+        "$ref": "#/$defs/Replayed"
+      },
+      "root_apps": {
+        "$ref": "#/$defs/RootApps"
+      },
+      "rule_action": {
+        "$ref": "#/$defs/EventRuleAction"
+      },
+      "sdk": {
+        "$ref": "#/$defs/SDK"
+      },
+      "supplementary_id_high_recall": {
+        "$ref": "#/$defs/SupplementaryIDHighRecall"
+      },
+      "suspect": {
+        "$ref": "#/$defs/Suspect"
+      },
+      "suspect_score": {
+        "$ref": "#/$defs/SuspectScore"
+      },
+      "tags": {
+        "$ref": "#/$defs/Tags"
+      },
+      "tampering": {
+        "$ref": "#/$defs/Tampering"
+      },
+      "tampering_details": {
+        "$ref": "#/$defs/TamperingDetails"
       },
       "timestamp": {
-        "description": "This field is just another representation of the value in the `time` field.\nThe time of the most recent factory reset that happened on the **mobile device** is expressed as Unix epoch time.\n",
-        "type": "integer"
+        "$ref": "#/$defs/Timestamp"
+      },
+      "url": {
+        "$ref": "#/$defs/Url"
+      },
+      "user_agent": {
+        "$ref": "#/$defs/UserAgent"
+      },
+      "velocity": {
+        "$ref": "#/$defs/Velocity"
+      },
+      "virtual_machine": {
+        "$ref": "#/$defs/VirtualMachine"
+      },
+      "vpn": {
+        "$ref": "#/$defs/Vpn"
+      },
+      "vpn_confidence": {
+        "$ref": "#/$defs/VpnConfidence"
+      },
+      "vpn_methods": {
+        "$ref": "#/$defs/VpnMethods"
+      },
+      "vpn_origin_country": {
+        "$ref": "#/$defs/VpnOriginCountry"
+      },
+      "vpn_origin_timezone": {
+        "$ref": "#/$defs/VpnOriginTimezone"
       }
     },
     "required": [
-      "time",
+      "event_id",
       "timestamp"
     ],
     "type": "object"
   },
-  "Frida": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "[Frida](https://frida.re/docs/) detection for Android and iOS devices. There are 2 values:\n  * `true` - Frida detected\n  * `false` - No signs of Frida or the client is not a mobile device.\n",
-        "type": "boolean"
+  "EventId": {
+    "description": "Unique identifier of the user's request. The first portion of the event_id is a unix epoch milliseconds timestamp For example: `1758130560902.8tRtrH`\n",
+    "type": "string"
+  },
+  "EventRuleAction": {
+    "additionalProperties": true,
+    "description": "Describes the action the client should take, according to the rule in the ruleset that matched the event. When getting an event by event ID, the rule_action will only be included when the ruleset_id query parameter is specified.",
+    "oneOf": [
+      {
+        "$ref": "#/$defs/EventRuleActionAllow"
+      },
+      {
+        "$ref": "#/$defs/EventRuleActionBlock"
       }
-    },
-    "required": [
-      "result"
     ],
     "type": "object"
   },
-  "Geolocation": {
-    "additionalProperties": false,
+  "EventRuleActionAllow": {
+    "additionalProperties": true,
+    "description": "Informs the client that the request should be forwarded to the origin with optional request header modifications.",
     "properties": {
-      "accuracyRadius": {
+      "request_header_modifications": {
+        "$ref": "#/$defs/RequestHeaderModifications"
+      },
+      "rule_expression": {
+        "$ref": "#/$defs/RuleExpression"
+      },
+      "rule_id": {
+        "$ref": "#/$defs/RuleId"
+      },
+      "ruleset_id": {
+        "$ref": "#/$defs/RulesetId"
+      },
+      "type": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/RuleActionType"
+          },
+          {
+            "const": "allow"
+          }
+        ]
+      }
+    },
+    "required": [
+      "ruleset_id",
+      "type"
+    ],
+    "type": "object"
+  },
+  "EventRuleActionBlock": {
+    "additionalProperties": true,
+    "description": "Informs the client the request should be blocked using the response described by this rule action.",
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RuleActionBody"
+      },
+      "headers": {
+        "description": "A list of headers to send.",
+        "items": {
+          "$ref": "#/$defs/RuleActionHeaderField"
+        },
+        "type": "array"
+      },
+      "rule_expression": {
+        "$ref": "#/$defs/RuleExpression"
+      },
+      "rule_id": {
+        "$ref": "#/$defs/RuleId"
+      },
+      "ruleset_id": {
+        "$ref": "#/$defs/RulesetId"
+      },
+      "status_code": {
+        "$ref": "#/$defs/StatusCode"
+      },
+      "type": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/RuleActionType"
+          },
+          {
+            "const": "block"
+          }
+        ]
+      }
+    },
+    "required": [
+      "ruleset_id",
+      "type"
+    ],
+    "type": "object"
+  },
+  "EventSearch": {
+    "additionalProperties": true,
+    "description": "Contains a list of all identification events matching the specified search criteria.",
+    "properties": {
+      "events": {
+        "items": {
+          "$ref": "#/$defs/Event"
+        },
+        "type": "array"
+      },
+      "pagination_key": {
+        "description": "Use this value in the `pagination_key` parameter to request the next page of search results.",
+        "type": "string"
+      },
+      "total_hits": {
+        "description": "This value represents the total number of events matching the search query, up to the limit provided in the `total_hits` query parameter. Only present if the `total_hits` query parameter was provided.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "events"
+    ],
+    "type": "object"
+  },
+  "FactoryReset": {
+    "description": "The time of the most recent factory reset that happened on the **mobile device** is expressed as Unix epoch time. When a factory reset cannot be detected on the mobile device or when the request is initiated from a browser,  this field will correspond to the *epoch* time (i.e 1 Jan 1970 UTC) as a value of 0. See [Factory Reset Detection](https://dev.fingerprint.com/docs/smart-signals-overview#factory-reset-detection) to learn more about this Smart Signal.\n",
+    "type": "integer"
+  },
+  "FontPreferences": {
+    "additionalProperties": true,
+    "description": "Baseline measurement of canonical fonts rendered on the device. Numeric width metrics, in CSS pixels, for the canonical fonts collected by the agent.\n",
+    "properties": {
+      "apple": {
+        "type": "number"
+      },
+      "default": {
+        "type": "number"
+      },
+      "min": {
+        "type": "number"
+      },
+      "mono": {
+        "type": "number"
+      },
+      "sans": {
+        "type": "number"
+      },
+      "serif": {
+        "type": "number"
+      },
+      "system": {
+        "type": "number"
+      }
+    },
+    "type": "object"
+  },
+  "Fonts": {
+    "description": "List of fonts detected on the device.",
+    "items": {
+      "type": "string"
+    },
+    "type": "array"
+  },
+  "Frida": {
+    "description": "[Frida](https://frida.re/docs/) detection for Android and iOS devices. There are 2 values:\n* `true` - Frida detected\n* `false` - No signs of Frida or the client is not a mobile device.\n",
+    "type": "boolean"
+  },
+  "Geolocation": {
+    "additionalProperties": true,
+    "properties": {
+      "accuracy_radius": {
         "description": "The IP address is likely to be within this radius (in km) of the specified location.",
         "minimum": 0,
         "type": "integer"
       },
-      "city": {
-        "$ref": "#/$defs/GeolocationCity"
+      "city_name": {
+        "type": "string"
       },
-      "continent": {
-        "$ref": "#/$defs/GeolocationContinent"
+      "continent_code": {
+        "maxLength": 2,
+        "minLength": 2,
+        "type": "string"
       },
-      "country": {
-        "$ref": "#/$defs/GeolocationCountry"
+      "continent_name": {
+        "type": "string"
+      },
+      "country_code": {
+        "maxLength": 2,
+        "minLength": 2,
+        "type": "string"
+      },
+      "country_name": {
+        "type": "string"
       },
       "latitude": {
         "maximum": 90,
@@ -291,11 +553,26 @@
         "minimum": -180,
         "type": "number"
       },
-      "postalCode": {
+      "postal_code": {
         "type": "string"
       },
       "subdivisions": {
-        "$ref": "#/$defs/GeolocationSubdivisions"
+        "items": {
+          "properties": {
+            "iso_code": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "iso_code",
+            "name"
+          ],
+          "type": "object"
+        },
+        "type": "array"
       },
       "timezone": {
         "type": "string"
@@ -303,131 +580,35 @@
     },
     "type": "object"
   },
-  "GeolocationCity": {
-    "additionalProperties": false,
-    "properties": {
-      "name": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "name"
-    ],
-    "type": "object"
-  },
-  "GeolocationContinent": {
-    "additionalProperties": false,
-    "properties": {
-      "code": {
-        "maxLength": 2,
-        "minLength": 2,
-        "type": "string"
-      },
-      "name": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "code",
-      "name"
-    ],
-    "type": "object"
-  },
-  "GeolocationCountry": {
-    "additionalProperties": false,
-    "properties": {
-      "code": {
-        "maxLength": 2,
-        "minLength": 2,
-        "type": "string"
-      },
-      "name": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "code",
-      "name"
-    ],
-    "type": "object"
-  },
-  "GeolocationSubdivision": {
-    "additionalProperties": false,
-    "properties": {
-      "isoCode": {
-        "type": "string"
-      },
-      "name": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "isoCode",
-      "name"
-    ],
-    "type": "object"
-  },
-  "GeolocationSubdivisions": {
-    "items": {
-      "$ref": "#/$defs/GeolocationSubdivision"
-    },
-    "type": "array"
+  "HardwareConcurrency": {
+    "description": "Number of logical CPU cores reported by the browser.",
+    "minimum": 1,
+    "type": "integer"
   },
   "HighActivity": {
-    "additionalProperties": false,
-    "properties": {
-      "dailyRequests": {
-        "description": "Number of requests from the same visitor in the previous day.",
-        "minimum": 1,
-        "type": "integer"
-      },
-      "result": {
-        "description": "Flag indicating if the request came from a high-activity visitor.",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "description": "Flag indicating if the request came from a high-activity visitor.",
+    "type": "boolean"
   },
-  "IPBlocklist": {
-    "additionalProperties": false,
+  "IPBlockList": {
+    "additionalProperties": true,
     "properties": {
-      "details": {
-        "$ref": "#/$defs/IPBlocklistDetails"
-      },
-      "result": {
-        "description": "`true` if request IP address is part of any database that we use to search for known malicious actors, `false` otherwise.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result",
-      "details"
-    ],
-    "type": "object"
-  },
-  "IPBlocklistDetails": {
-    "additionalProperties": false,
-    "properties": {
-      "attackSource": {
+      "attack_source": {
         "description": "IP address was part of a known network attack (SSH/HTTPS).",
         "type": "boolean"
       },
-      "emailSpam": {
+      "email_spam": {
         "description": "IP address was part of a known email spam attack (SMTP).",
+        "type": "boolean"
+      },
+      "tor_node": {
+        "description": "IP address was part of known TOR network activity.",
         "type": "boolean"
       }
     },
-    "required": [
-      "emailSpam",
-      "attackSource"
-    ],
     "type": "object"
   },
   "IPInfo": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "description": "Details about the request IP address. Has separate fields for v4 and v6 IP address versions.",
     "properties": {
       "v4": {
@@ -439,193 +620,107 @@
     },
     "type": "object"
   },
-  "IPInfoASN": {
-    "additionalProperties": false,
-    "properties": {
-      "asn": {
-        "type": "string"
-      },
-      "name": {
-        "type": "string"
-      },
-      "network": {
-        "type": "string"
-      },
-      "type": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "asn",
-      "name",
-      "network"
-    ],
-    "type": "object"
-  },
-  "IPInfoDataCenter": {
-    "additionalProperties": false,
-    "properties": {
-      "name": {
-        "type": "string"
-      },
-      "result": {
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result",
-      "name"
-    ],
-    "type": "object"
-  },
   "IPInfoV4": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "address": {
         "format": "ipv4",
         "type": "string"
       },
       "asn": {
-        "$ref": "#/$defs/IPInfoASN"
+        "type": "string"
       },
-      "datacenter": {
-        "$ref": "#/$defs/IPInfoDataCenter"
+      "asn_name": {
+        "type": "string"
+      },
+      "asn_network": {
+        "type": "string"
+      },
+      "asn_type": {
+        "type": "string"
+      },
+      "datacenter_name": {
+        "type": "string"
+      },
+      "datacenter_result": {
+        "type": "boolean"
       },
       "geolocation": {
         "$ref": "#/$defs/Geolocation"
       }
     },
     "required": [
-      "address",
-      "geolocation"
+      "address"
     ],
     "type": "object"
   },
   "IPInfoV6": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "address": {
         "format": "ipv6",
         "type": "string"
       },
       "asn": {
-        "$ref": "#/$defs/IPInfoASN"
+        "type": "string"
       },
-      "datacenter": {
-        "$ref": "#/$defs/IPInfoDataCenter"
+      "asn_name": {
+        "type": "string"
+      },
+      "asn_network": {
+        "type": "string"
+      },
+      "asn_type": {
+        "type": "string"
+      },
+      "datacenter_name": {
+        "type": "string"
+      },
+      "datacenter_result": {
+        "type": "boolean"
       },
       "geolocation": {
         "$ref": "#/$defs/Geolocation"
       }
     },
     "required": [
-      "address",
-      "geolocation"
+      "address"
     ],
     "type": "object"
   },
   "Identification": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
-      "browserDetails": {
-        "$ref": "#/$defs/BrowserDetails"
-      },
-      "components": {
-        "$ref": "#/$defs/RawDeviceAttributes"
-      },
       "confidence": {
         "$ref": "#/$defs/IdentificationConfidence"
       },
-      "environmentId": {
-        "description": "Environment ID associated with the event",
-        "type": "string"
-      },
-      "firstSeenAt": {
-        "$ref": "#/$defs/IdentificationSeenAt"
-      },
-      "incognito": {
-        "description": "Flag if user used incognito session.",
-        "type": "boolean"
-      },
-      "ip": {
-        "description": "IP address of the requesting browser or bot.",
-        "type": "string"
-      },
-      "ipLocation": {
-        "$ref": "#/$defs/DeprecatedGeolocation"
-      },
-      "lastSeenAt": {
-        "$ref": "#/$defs/IdentificationSeenAt"
-      },
-      "linkedId": {
-        "description": "A customer-provided id that was sent with the request.",
-        "type": "string"
-      },
-      "replayed": {
-        "description": "`true` if we determined that this payload was replayed, `false` otherwise.\n",
-        "type": "boolean"
-      },
-      "requestId": {
-        "description": "Unique identifier of the user's request.",
-        "type": "string"
-      },
-      "sdk": {
-        "$ref": "#/$defs/SDK"
-      },
-      "suspect": {
-        "description": "Field is `true` if you have previously set the `suspect` flag for this event using the [Server API Update event endpoint](https://dev.fingerprint.com/reference/updateevent).",
-        "type": "boolean"
-      },
-      "tag": {
-        "$ref": "#/$defs/Tag"
-      },
-      "time": {
-        "description": "Time expressed according to ISO 8601 in UTC format, when the request from the JS agent was made. We recommend to treat requests that are older than 2 minutes as malicious. Otherwise, request replay attacks are possible.",
-        "format": "date-time",
-        "type": "string"
-      },
-      "timestamp": {
-        "description": "Timestamp of the event with millisecond precision in Unix time.",
+      "first_seen_at": {
+        "description": "Unix epoch time milliseconds timestamp indicating the time at which this visitor ID was first seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
         "type": "integer"
       },
-      "url": {
-        "description": "Page URL from which the request was sent.",
-        "type": "string"
+      "last_seen_at": {
+        "description": "Unix epoch time milliseconds timestamp indicating the time at which this visitor ID was last seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "type": "integer"
       },
-      "visitorFound": {
+      "visitor_found": {
         "description": "Attribute represents if a visitor had been identified before.",
         "type": "boolean"
       },
-      "visitorId": {
+      "visitor_id": {
         "description": "String of 20 characters that uniquely identifies the visitor's browser or mobile device.",
         "type": "string"
       }
     },
     "required": [
-      "visitorId",
-      "requestId",
-      "browserDetails",
-      "incognito",
-      "ip",
-      "timestamp",
-      "time",
-      "url",
-      "tag",
-      "visitorFound",
-      "firstSeenAt",
-      "lastSeenAt",
-      "replayed"
+      "visitor_id",
+      "visitor_found"
     ],
     "type": "object"
   },
   "IdentificationConfidence": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "comment": {
-        "type": "string"
-      },
-      "revision": {
-        "description": "The revision name of the method used to calculate the Confidence score. This field is only present for customers who opted in to an alternative calculation method.",
         "type": "string"
       },
       "score": {
@@ -633,6 +728,10 @@
         "maximum": 1,
         "minimum": 0,
         "type": "number"
+      },
+      "version": {
+        "description": "The version name of the method used to calculate the Confidence score. This field is only present for customers who opted in to an alternative calculation method.",
+        "type": "string"
       }
     },
     "required": [
@@ -640,52 +739,22 @@
     ],
     "type": "object"
   },
-  "IdentificationSeenAt": {
-    "additionalProperties": false,
-    "properties": {
-      "global": {
-        "format": "date-time",
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "subscription": {
-        "format": "date-time",
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
-    "required": [
-      "global",
-      "subscription"
-    ],
-    "type": "object"
-  },
   "Incognito": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "`true` if we detected incognito mode used in the browser, `false` otherwise.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "description": "`true` if we detected incognito mode used in the browser, `false` otherwise.\n",
+    "type": "boolean"
+  },
+  "IndexedDb": {
+    "description": "Whether IndexedDB is available.",
+    "type": "boolean"
   },
   "Integration": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "name": {
         "description": "The name of the specific integration, e.g. \"fingerprint-pro-react\".",
         "type": "string"
       },
       "subintegration": {
-        "additionalProperties": false,
         "properties": {
           "name": {
             "description": "The name of the specific subintegration, e.g. \"preact\".",
@@ -705,458 +774,97 @@
     },
     "type": "object"
   },
+  "IpAddress": {
+    "description": "IP address of the requesting browser or bot.",
+    "type": "string"
+  },
   "Jailbroken": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "iOS specific jailbreak detection. There are 2 values: \n  * `true` - Jailbreak detected.\n  * `false` - No signs of jailbreak or the client is not iOS.\n",
-        "type": "boolean"
-      }
+    "description": "iOS specific jailbreak detection. There are 2 values: \n* `true` - Jailbreak detected.\n* `false` - No signs of jailbreak or the client is not iOS.\n",
+    "type": "boolean"
+  },
+  "Languages": {
+    "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs.\n",
+    "items": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "type": "array"
+  },
+  "LinkedId": {
+    "description": "A customer-provided id that was sent with the request.",
+    "type": "string"
+  },
+  "LocalStorage": {
+    "description": "Whether localStorage is available.",
+    "type": "boolean"
   },
   "LocationSpoofing": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "Flag indicating whether the request came from a mobile device with location spoofing enabled.",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "description": "Flag indicating whether the request came from a mobile device with location spoofing enabled.",
+    "type": "boolean"
+  },
+  "Math": {
+    "description": "Hash of Math APIs used for entropy collection.",
+    "type": "string"
   },
   "MitMAttack": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "* `true` - When requests made from your users' mobile devices to Fingerprint servers have been intercepted and potentially modified. \n* `false` - Otherwise or when the request originated from a browser.\nSee [MitM Attack Detection](https://dev.fingerprint.com/docs/smart-signals-reference#mitm-attack-detection) to learn more about this Smart Signal.\n",
-        "type": "boolean"
-      }
+    "description": "* `true` - When requests made from your users' mobile devices to Fingerprint servers have been intercepted and potentially modified. \n* `false` - Otherwise or when the request originated from a browser.\nSee [MitM Attack Detection](https://dev.fingerprint.com/docs/smart-signals-reference#mitm-attack-detection) to learn more about this Smart Signal.\n",
+    "type": "boolean"
+  },
+  "Oscpu": {
+    "description": "Navigator `oscpu` string.",
+    "type": "string"
+  },
+  "PackageName": {
+    "description": "Package name of the Android application integrated with the Fingerprint SDK for the event. For example: `com.foo.app`\n",
+    "type": "string"
+  },
+  "Platform": {
+    "description": "Navigator platform string.",
+    "type": "string"
+  },
+  "Plugins": {
+    "description": "Browser plugins reported by `navigator.plugins`.",
+    "items": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "mimeTypes": {
+          "items": {
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "suffixes": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
     },
-    "required": [
-      "result"
-    ],
-    "type": "object"
+    "type": "array"
   },
   "PrivacySettings": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "`true` if the request is from a privacy aware browser (e.g. Tor) or from a browser in which fingerprinting is blocked. Otherwise `false`.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
-    "type": "object"
-  },
-  "ProductBotd": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Botd"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductClonedApp": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/ClonedApp"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductDeveloperTools": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/DeveloperTools"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductEmulator": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Emulator"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductFactoryReset": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/FactoryReset"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductFrida": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Frida"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductHighActivity": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/HighActivity"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductIPBlocklist": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/IPBlocklist"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductIPInfo": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/IPInfo"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductIdentification": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Identification"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductIncognito": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Incognito"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductJailbroken": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Jailbroken"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductLocationSpoofing": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/LocationSpoofing"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductMitMAttack": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/MitMAttack"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductPrivacySettings": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/PrivacySettings"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductProximity": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Proximity"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductProxy": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Proxy"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductRawDeviceAttributes": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/RawDeviceAttributes"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductRemoteControl": {
-    "additionalProperties": false,
-    "description": "This product is deprecated.\n",
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/RemoteControl"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductRootApps": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/RootApps"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductSuspectScore": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/SuspectScore"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductTampering": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Tampering"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductTor": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Tor"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductVPN": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/VPN"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductVelocity": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/Velocity"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "ProductVirtualMachine": {
-    "additionalProperties": false,
-    "properties": {
-      "data": {
-        "$ref": "#/$defs/VirtualMachine"
-      },
-      "error": {
-        "$ref": "#/$defs/Error"
-      }
-    },
-    "type": "object"
-  },
-  "Products": {
-    "additionalProperties": false,
-    "description": "Contains all information about the request identified by `requestId`, depending on the pricing plan (Pro, Pro Plus, Enterprise)",
-    "properties": {
-      "botd": {
-        "$ref": "#/$defs/ProductBotd"
-      },
-      "clonedApp": {
-        "$ref": "#/$defs/ProductClonedApp"
-      },
-      "developerTools": {
-        "$ref": "#/$defs/ProductDeveloperTools"
-      },
-      "emulator": {
-        "$ref": "#/$defs/ProductEmulator"
-      },
-      "factoryReset": {
-        "$ref": "#/$defs/ProductFactoryReset"
-      },
-      "frida": {
-        "$ref": "#/$defs/ProductFrida"
-      },
-      "highActivity": {
-        "$ref": "#/$defs/ProductHighActivity"
-      },
-      "identification": {
-        "$ref": "#/$defs/ProductIdentification"
-      },
-      "incognito": {
-        "$ref": "#/$defs/ProductIncognito"
-      },
-      "ipBlocklist": {
-        "$ref": "#/$defs/ProductIPBlocklist"
-      },
-      "ipInfo": {
-        "$ref": "#/$defs/ProductIPInfo"
-      },
-      "jailbroken": {
-        "$ref": "#/$defs/ProductJailbroken"
-      },
-      "locationSpoofing": {
-        "$ref": "#/$defs/ProductLocationSpoofing"
-      },
-      "mitmAttack": {
-        "$ref": "#/$defs/ProductMitMAttack"
-      },
-      "privacySettings": {
-        "$ref": "#/$defs/ProductPrivacySettings"
-      },
-      "proximity": {
-        "$ref": "#/$defs/ProductProximity"
-      },
-      "proxy": {
-        "$ref": "#/$defs/ProductProxy"
-      },
-      "rawDeviceAttributes": {
-        "$ref": "#/$defs/ProductRawDeviceAttributes"
-      },
-      "remoteControl": {
-        "$ref": "#/$defs/ProductRemoteControl"
-      },
-      "rootApps": {
-        "$ref": "#/$defs/ProductRootApps"
-      },
-      "suspectScore": {
-        "$ref": "#/$defs/ProductSuspectScore"
-      },
-      "tampering": {
-        "$ref": "#/$defs/ProductTampering"
-      },
-      "tor": {
-        "$ref": "#/$defs/ProductTor"
-      },
-      "velocity": {
-        "$ref": "#/$defs/ProductVelocity"
-      },
-      "virtualMachine": {
-        "$ref": "#/$defs/ProductVirtualMachine"
-      },
-      "vpn": {
-        "$ref": "#/$defs/ProductVPN"
-      }
-    },
-    "type": "object"
+    "description": "`true` if the request is from a privacy aware browser (e.g. Tor) or from a browser in which fingerprinting is blocked. Otherwise `false`.\n",
+    "type": "boolean"
   },
   "Proximity": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "description": "Proximity ID represents a fixed geographical zone in a discrete global grid within which the device is observed.\n",
     "properties": {
       "confidence": {
@@ -1169,7 +877,7 @@
         "description": "A stable privacy-preserving identifier for a given proximity zone.\n",
         "type": "string"
       },
-      "precisionRadius": {
+      "precision_radius": {
         "description": "The radius of the proximity zone’s precision level, in meters.\n",
         "enum": [
           10,
@@ -1187,33 +895,17 @@
     },
     "required": [
       "id",
-      "precisionRadius",
+      "precision_radius",
       "confidence"
     ],
     "type": "object"
   },
   "Proxy": {
-    "additionalProperties": false,
-    "properties": {
-      "confidence": {
-        "$ref": "#/$defs/ProxyConfidence"
-      },
-      "details": {
-        "$ref": "#/$defs/ProxyDetails"
-      },
-      "result": {
-        "description": "IP address was used by a public proxy provider or belonged to a known recent residential proxy\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result",
-      "confidence"
-    ],
-    "type": "object"
+    "description": "IP address was used by a public proxy provider or belonged to a known recent residential proxy\n",
+    "type": "boolean"
   },
   "ProxyConfidence": {
-    "description": "Confidence level of the proxy detection.\nIf a proxy is not detected, confidence is \"high\".\nIf it's detected, can be \"low\", \"medium\", or \"high\".\n",
+    "description": "Confidence level of the proxy detection. If a proxy is not detected, confidence is \"high\". If it's detected, can be \"low\", \"medium\", or \"high\".\n",
     "enum": [
       "low",
       "medium",
@@ -1222,15 +914,18 @@
     "type": "string"
   },
   "ProxyDetails": {
-    "additionalProperties": false,
-    "description": "Proxy detection details (present if proxy is detected)",
+    "additionalProperties": true,
+    "description": "Proxy detection details (present if `proxy` is `true`)",
     "properties": {
-      "lastSeenAt": {
-        "description": "ISO 8601 formatted timestamp in UTC with hourly resolution\nof when this IP was last seen as a proxy when available.\n",
-        "format": "date-time",
+      "last_seen_at": {
+        "description": "Unix millisecond timestamp with hourly resolution of when this IP was last seen as a proxy\n",
+        "type": "integer"
+      },
+      "provider": {
+        "description": "String representing the last proxy service provider detected when this\nIP was synced. An IP can be shared by multiple service providers.\n",
         "type": "string"
       },
-      "proxyType": {
+      "proxy_type": {
         "description": "Residential proxies use real user IP addresses to appear as legitimate traffic, \nwhile data center proxies are public proxies hosted in data centers\n",
         "enum": [
           "residential",
@@ -1240,73 +935,172 @@
       }
     },
     "required": [
-      "proxyType"
+      "proxy_type"
     ],
-    "type": [
-      "object",
-      "null"
-    ]
-  },
-  "RawDeviceAttribute": {
-    "additionalProperties": false,
-    "properties": {
-      "error": {
-        "$ref": "#/$defs/RawDeviceAttributeError"
-      },
-      "value": {
-        "title": "value"
-      }
-    },
-    "type": "object"
-  },
-  "RawDeviceAttributeError": {
-    "additionalProperties": false,
-    "properties": {
-      "message": {
-        "type": "string"
-      },
-      "name": {
-        "type": "string"
-      }
-    },
     "type": "object"
   },
   "RawDeviceAttributes": {
-    "additionalProperties": {
-      "$ref": "#/$defs/RawDeviceAttribute"
-    },
-    "description": "It includes 35+ raw browser identification attributes to provide Fingerprint users with even more information than our standard visitor ID provides. This enables Fingerprint users to not have to run our open-source product in conjunction with Fingerprint Pro Plus and Enterprise to get those additional attributes.\nWarning: The raw signals data can change at any moment as we improve the product. We cannot guarantee the internal shape of raw device attributes to be stable, so typical semantic versioning rules do not apply here. Use this data with caution without assuming a specific structure beyond the generic type provided here.\n",
-    "type": "object"
-  },
-  "RemoteControl": {
-    "additionalProperties": false,
-    "description": "This signal is deprecated.\n",
+    "additionalProperties": true,
+    "description": "A curated subset of raw browser/device attributes that the API surface exposes. Each property contains a value or object with the data for the collected signal.\n",
     "properties": {
-      "result": {
-        "description": "`true` if the request came from a machine being remotely controlled (e.g. TeamViewer), `false` otherwise.\n",
-        "type": "boolean"
+      "architecture": {
+        "$ref": "#/$defs/Architecture"
+      },
+      "audio": {
+        "$ref": "#/$defs/Audio"
+      },
+      "canvas": {
+        "$ref": "#/$defs/Canvas"
+      },
+      "color_depth": {
+        "$ref": "#/$defs/ColorDepth"
+      },
+      "cookies_enabled": {
+        "$ref": "#/$defs/CookiesEnabled"
+      },
+      "date_time_locale": {
+        "$ref": "#/$defs/DateTimeLocale"
+      },
+      "device_memory": {
+        "$ref": "#/$defs/DeviceMemory"
+      },
+      "emoji": {
+        "$ref": "#/$defs/Emoji"
+      },
+      "font_preferences": {
+        "$ref": "#/$defs/FontPreferences"
+      },
+      "fonts": {
+        "$ref": "#/$defs/Fonts"
+      },
+      "hardware_concurrency": {
+        "$ref": "#/$defs/HardwareConcurrency"
+      },
+      "indexed_db": {
+        "$ref": "#/$defs/IndexedDb"
+      },
+      "languages": {
+        "$ref": "#/$defs/Languages"
+      },
+      "local_storage": {
+        "$ref": "#/$defs/LocalStorage"
+      },
+      "math": {
+        "$ref": "#/$defs/Math"
+      },
+      "oscpu": {
+        "$ref": "#/$defs/Oscpu"
+      },
+      "platform": {
+        "$ref": "#/$defs/Platform"
+      },
+      "plugins": {
+        "$ref": "#/$defs/Plugins"
+      },
+      "screen_resolution": {
+        "$ref": "#/$defs/ScreenResolution"
+      },
+      "session_storage": {
+        "$ref": "#/$defs/SessionStorage"
+      },
+      "timezone": {
+        "$ref": "#/$defs/Timezone"
+      },
+      "touch_support": {
+        "$ref": "#/$defs/TouchSupport"
+      },
+      "vendor": {
+        "$ref": "#/$defs/Vendor"
+      },
+      "webgl_basics": {
+        "$ref": "#/$defs/WebGlBasics"
+      },
+      "webgl_extensions": {
+        "$ref": "#/$defs/WebGlExtensions"
       }
     },
-    "required": [
-      "result"
-    ],
+    "type": "object"
+  },
+  "Replayed": {
+    "description": "`true` if we determined that this payload was replayed, `false` otherwise.\n",
+    "type": "boolean"
+  },
+  "RequestHeaderModifications": {
+    "additionalProperties": true,
+    "description": "The set of header modifications to apply, in the following order: remove, set, append.",
+    "properties": {
+      "append": {
+        "description": "The list of headers to append.",
+        "items": {
+          "$ref": "#/$defs/RuleActionHeaderField"
+        },
+        "type": "array"
+      },
+      "remove": {
+        "description": "The list of headers to remove.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "set": {
+        "description": "The list of headers to set, overwriting any existing headers with the same name.",
+        "items": {
+          "$ref": "#/$defs/RuleActionHeaderField"
+        },
+        "type": "array"
+      }
+    },
     "type": "object"
   },
   "RootApps": {
-    "additionalProperties": false,
+    "description": "Android specific root management apps detection. There are 2 values: \n* `true` - Root Management Apps detected (e.g. Magisk).\n* `false` - No Root Management Apps detected or the client isn't Android.\n",
+    "type": "boolean"
+  },
+  "RuleActionBody": {
+    "description": "The response body to send to the client.",
+    "type": "string"
+  },
+  "RuleActionHeaderField": {
+    "additionalProperties": true,
     "properties": {
-      "result": {
-        "description": "Android specific root management apps detection. There are 2 values: \n  * `true` - Root Management Apps detected (e.g. Magisk).\n  * `false` - No Root Management Apps detected or the client isn't Android.\n",
-        "type": "boolean"
+      "name": {
+        "description": "The header field name.",
+        "type": "string"
+      },
+      "value": {
+        "description": "The value of the header field.",
+        "type": "string"
       }
     },
     "required": [
-      "result"
+      "name",
+      "value"
     ],
     "type": "object"
   },
+  "RuleActionType": {
+    "description": "Describes the action to take with the request.",
+    "enum": [
+      "allow",
+      "block"
+    ],
+    "type": "string"
+  },
+  "RuleExpression": {
+    "description": "The expression of the rule that matched the identification event.",
+    "type": "string"
+  },
+  "RuleId": {
+    "description": "The ID of the rule that matched the identification event.",
+    "type": "string"
+  },
+  "RulesetId": {
+    "description": "The ID of the evaluated ruleset.",
+    "type": "string"
+  },
   "SDK": {
-    "additionalProperties": false,
+    "additionalProperties": true,
     "description": "Contains information about the SDK used to perform the request.",
     "properties": {
       "integrations": {
@@ -1316,11 +1110,17 @@
         "type": "array"
       },
       "platform": {
-        "description": "Platform of the SDK.",
+        "description": "Platform of the SDK used for the identification request.",
+        "enum": [
+          "js",
+          "android",
+          "ios",
+          "unknown"
+        ],
         "type": "string"
       },
       "version": {
-        "description": "SDK version string.",
+        "description": "Version string of the SDK used for the identification request. For example: `\"3.12.1\"`\n",
         "type": "string"
       }
     },
@@ -1330,120 +1130,182 @@
     ],
     "type": "object"
   },
-  "SearchEventsResponse": {
-    "additionalProperties": false,
-    "description": "Contains a list of all identification events matching the specified search criteria.",
+  "ScreenResolution": {
+    "description": "Current screen resolution.",
+    "items": {
+      "type": "integer"
+    },
+    "maxItems": 2,
+    "minItems": 2,
+    "type": "array"
+  },
+  "SessionStorage": {
+    "description": "Whether sessionStorage is available.",
+    "type": "boolean"
+  },
+  "StatusCode": {
+    "description": "A valid HTTP status code.",
+    "type": "integer"
+  },
+  "SupplementaryIDHighRecall": {
+    "additionalProperties": true,
+    "description": "A supplementary browser identifier that prioritizes coverage over precision. The High Recall ID algorithm matches more generously, i.e., this identifier will remain the same even when there are subtle differences between two requests. This algorithm does not create as many new visitor IDs as the standard algorithms do, but there could be an increase in false-positive identification.",
     "properties": {
-      "events": {
-        "items": {
-          "description": "Device intelligence results for the identification event.",
-          "properties": {
-            "products": {
-              "$ref": "#/$defs/Products"
-            }
-          },
-          "required": [
-            "products"
-          ],
-          "type": "object"
-        },
-        "type": "array"
+      "confidence": {
+        "$ref": "#/$defs/IdentificationConfidence"
       },
-      "paginationKey": {
-        "description": "Use this value in the `pagination_key` parameter to request the next page of search results.",
+      "first_seen_at": {
+        "description": "Unix epoch time milliseconds timestamp indicating the time at which this ID was first seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "type": "integer"
+      },
+      "last_seen_at": {
+        "description": "Unix epoch time milliseconds timestamp indicating the time at which this ID was last seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "type": "integer"
+      },
+      "visitor_found": {
+        "description": "Attribute represents if a visitor had been identified before.",
+        "type": "boolean"
+      },
+      "visitor_id": {
+        "description": "String of 20 characters that uniquely identifies the visitor's browser or mobile device.",
         "type": "string"
       }
     },
-    "type": "object"
-  },
-  "SuspectScore": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "Suspect Score is an easy way to integrate Smart Signals into your fraud protection work flow.  It is a weighted representation of all Smart Signals present in the payload that helps identify suspicious activity. The value range is [0; S] where S is sum of all Smart Signals weights.  See more details here: https://dev.fingerprint.com/docs/suspect-score\n",
-        "type": "integer"
-      }
-    },
     "required": [
-      "result"
+      "visitor_id",
+      "visitor_found"
     ],
     "type": "object"
   },
-  "Tag": {
+  "Suspect": {
+    "description": "Field is `true` if you have previously set the `suspect` flag for this event using the [Server API Update event endpoint](https://dev.fingerprint.com/reference/updateevent).",
+    "type": "boolean"
+  },
+  "SuspectScore": {
+    "description": "Suspect Score is an easy way to integrate Smart Signals into your fraud protection work flow.  It is a weighted representation of all Smart Signals present in the payload that helps identify suspicious activity. The value range is [0; S] where S is sum of all Smart Signals weights.  See more details here: https://dev.fingerprint.com/docs/suspect-score\n",
+    "type": "integer"
+  },
+  "Tags": {
     "additionalProperties": true,
-    "description": "A customer-provided value or an object that was sent with identification request.",
+    "description": "A customer-provided value or an object that was sent with the identification request or updated later.",
     "type": "object"
   },
   "Tampering": {
-    "additionalProperties": false,
+    "description": "Flag indicating browser tampering was detected. This happens when either:\n  * There are inconsistencies in the browser configuration that cross internal tampering thresholds (see `tampering_details.anomaly_score`).\n  * The browser signature resembles an \"anti-detect\" browser specifically designed to evade fingerprinting (see `tampering_details.anti_detect_browser`).\n",
+    "type": "boolean"
+  },
+  "TamperingDetails": {
+    "additionalProperties": true,
     "properties": {
-      "anomalyScore": {
-        "description": "A score that indicates the extent of anomalous data in the request. This field applies to requests originating from **both** browsers and Android SDKs. \n  * Values above `0.5` indicate that the request has been tampered with.\n  * Values below `0.5` indicate that the request is genuine.\n",
+      "anomaly_score": {
+        "description": "Confidence score (`0.0 - 1.0`) for tampering detection:\n  * Values above `0.5` indicate tampering.\n  * Values below `0.5` indicate genuine browsers.\n",
         "maximum": 1,
         "minimum": 0,
         "type": "number"
       },
-      "antiDetectBrowser": {
-        "description": "Anti-detect browsers try to evade identification by masking or manipulating their fingerprint to imitate legitimate browser configurations. This field does not apply to requests originating from mobile SDKs.\n  * `true` - The browser resembles a known anti-detect browser, for example, Incognition.\n  * `false` - The browser does not resemble an anti-detect browser or the request originates from a mobile SDK.\n",
-        "type": "boolean"
-      },
-      "result": {
-        "description": "Indicates if an identification request from a browser or an Android SDK has been tampered with. Not supported in the iOS SDK, is always `false` for iOS requests.\n  * `true` - If the request meets either of the following conditions:\n    * Contains anomalous browser or device attributes that could not have been legitimately produced by the JavaScript agent or the Android SDK (see `anomalyScore`).\n    * Originated from an anti-detect browser like Incognition (see `antiDetectBrowser`).\n  * `false` - If the request is considered genuine or was generated by the iOS SDK.\n",
+      "anti_detect_browser": {
+        "description": "True if the identified browser resembles an \"anti-detect\" browser, such as Incognition, which attempts to evade identification by manipulating its fingerprint.\n",
         "type": "boolean"
       }
     },
-    "required": [
-      "result",
-      "anomalyScore",
-      "antiDetectBrowser"
-    ],
     "type": "object"
   },
-  "Tor": {
-    "additionalProperties": false,
+  "Timestamp": {
+    "description": "Timestamp of the event with millisecond precision in Unix time.",
+    "type": "integer"
+  },
+  "Timezone": {
+    "description": "Timezone identifier detected on the client.",
+    "type": "string"
+  },
+  "TouchSupport": {
+    "additionalProperties": true,
+    "description": "Browser-reported touch capabilities.",
     "properties": {
-      "result": {
-        "description": "`true` if the request IP address is a known tor exit node, `false` otherwise.\n",
+      "max_touch_points": {
+        "type": "integer"
+      },
+      "touch_event": {
+        "type": "boolean"
+      },
+      "touch_start": {
         "type": "boolean"
       }
     },
-    "required": [
-      "result"
-    ],
     "type": "object"
   },
-  "VPN": {
-    "additionalProperties": false,
+  "Url": {
+    "description": "Page URL from which the request was sent. For example `https://example.com/`\n",
+    "type": "string"
+  },
+  "UserAgent": {
+    "description": "User Agent of the client, for example: `Mozilla/5.0 (Windows NT 6.1; Win64; x64) ....`\n",
+    "type": "string"
+  },
+  "Velocity": {
+    "additionalProperties": true,
+    "description": "Sums key data points for a specific `visitor_id`, `ip_address` and `linked_id` at three distinct time\nintervals: 5 minutes, 1 hour, and 24 hours as follows: \n\n- Number of distinct IP addresses associated to the visitor Id.\n- Number of distinct linked Ids associated with the visitor Id.\n- Number of distinct countries associated with the visitor Id.\n- Number of identification events associated with the visitor Id.\n- Number of identification events associated with the detected IP address.\n- Number of distinct IP addresses associated with the provided linked Id.\n- Number of distinct visitor Ids associated with the provided linked Id.\n\nThe `24h` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`,\n`distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted \nif the number of `events` for the visitor Id in the last 24\nhours (`events.['24h']`) is higher than 20.000.\n\nAll will not necessarily be returned in a response, some may be omitted if the \nassociated event does not have the required data, such as a linked_id.\n",
     "properties": {
-      "confidence": {
-        "$ref": "#/$defs/VPNConfidence"
+      "distinct_country": {
+        "$ref": "#/$defs/VelocityData"
       },
-      "methods": {
-        "$ref": "#/$defs/VPNMethods"
+      "distinct_ip": {
+        "$ref": "#/$defs/VelocityData"
       },
-      "originCountry": {
-        "description": "Country of the request (only for Android SDK version \u003e= 2.4.0, ISO 3166 format or unknown).",
-        "type": "string"
+      "distinct_ip_by_linked_id": {
+        "$ref": "#/$defs/VelocityData"
       },
-      "originTimezone": {
-        "description": "Local timezone which is used in timezoneMismatch method.",
-        "type": "string"
+      "distinct_linked_id": {
+        "$ref": "#/$defs/VelocityData"
       },
-      "result": {
-        "description": "VPN or other anonymizing service has been used when sending the request.",
-        "type": "boolean"
+      "distinct_visitor_id_by_linked_id": {
+        "$ref": "#/$defs/VelocityData"
+      },
+      "events": {
+        "$ref": "#/$defs/VelocityData"
+      },
+      "ip_events": {
+        "$ref": "#/$defs/VelocityData"
+      }
+    },
+    "type": "object"
+  },
+  "VelocityData": {
+    "additionalProperties": true,
+    "description": "Is absent if the velocity data could not be generated for the visitor Id.\n",
+    "properties": {
+      "1_hour": {
+        "description": "Count for the last 1 hour of velocity data, from the time of the event.\n",
+        "type": "integer"
+      },
+      "24_hours": {
+        "description": "The `24_hours` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`, `distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted if the number of `events` for the visitor Id in the last 24 hours (`events.['24_hours']`) is higher than 20.000.\n",
+        "type": "integer"
+      },
+      "5_minutes": {
+        "description": "Count for the last 5 minutes of velocity data, from the time of the event.\n",
+        "type": "integer"
       }
     },
     "required": [
-      "result",
-      "confidence",
-      "originTimezone",
-      "originCountry",
-      "methods"
+      "5_minutes",
+      "1_hour"
     ],
     "type": "object"
   },
-  "VPNConfidence": {
+  "Vendor": {
+    "description": "Navigator vendor string.",
+    "type": "string"
+  },
+  "VirtualMachine": {
+    "description": "`true` if the request came from a browser running inside a virtual machine (e.g. VMWare), `false` otherwise.\n",
+    "type": "boolean"
+  },
+  "Vpn": {
+    "description": "VPN or other anonymizing service has been used when sending the request.\n",
+    "type": "boolean"
+  },
+  "VpnConfidence": {
     "description": "A confidence rating for the VPN detection result — \"low\", \"medium\", or \"high\". Depends on the combination of results returned from all VPN detection methods.",
     "enum": [
       "low",
@@ -1452,117 +1314,91 @@
     ],
     "type": "string"
   },
-  "VPNMethods": {
-    "additionalProperties": false,
+  "VpnMethods": {
+    "additionalProperties": true,
     "properties": {
-      "auxiliaryMobile": {
+      "auxiliary_mobile": {
         "description": "This method applies to mobile devices only. Indicates the result of additional methods used to detect a VPN in mobile devices.",
         "type": "boolean"
       },
-      "osMismatch": {
+      "os_mismatch": {
         "description": "The browser runs on a different operating system than the operating system inferred from the request network signature.",
         "type": "boolean"
       },
-      "publicVPN": {
+      "public_vpn": {
         "description": "Request IP address is owned and used by a public VPN service provider.",
         "type": "boolean"
       },
       "relay": {
-        "description": "Request IP address belongs to a relay service provider, indicating the use of relay services like [Apple Private relay](https://support.apple.com/en-us/102602) or [Cloudflare Warp](https://developers.cloudflare.com/warp-client/). \n\n* Like VPNs, relay services anonymize the visitor's true IP address.\n* Unlike traditional VPNs, relay services don't let visitors spoof their location by choosing an exit node in a different country.\n\nThis field allows you to differentiate VPN users and relay service users in your fraud prevention logic.\n",
+        "description": "Request IP address belongs to a relay service provider, indicating the use of relay services like [Apple Private relay](https://support.apple.com/en-us/102602) or [Cloudflare Warp](https://developers.cloudflare.com/warp-client/).\n\n* Like VPNs, relay services anonymize the visitor's true IP address.\n* Unlike traditional VPNs, relay services don't let visitors spoof their location by choosing an exit node in a different country.\n\nThis field allows you to differentiate VPN users and relay service users in your fraud prevention logic.\n",
         "type": "boolean"
       },
-      "timezoneMismatch": {
+      "timezone_mismatch": {
         "description": "The browser timezone doesn't match the timezone inferred from the request IP address.",
         "type": "boolean"
       }
     },
-    "required": [
-      "timezoneMismatch",
-      "publicVPN",
-      "auxiliaryMobile",
-      "osMismatch",
-      "relay"
-    ],
     "type": "object"
   },
-  "Velocity": {
-    "additionalProperties": false,
-    "description": "Sums key data points for a specific `visitorId`, `ipAddress` and `linkedId` at three distinct time\nintervals: 5 minutes, 1 hour, and 24 hours as follows: \n\n- Number of distinct IP addresses associated to the visitor ID.\n- Number of distinct linked IDs associated with the visitor ID.\n- Number of distinct countries associated with the visitor ID.\n- Number of identification events associated with the visitor ID.\n- Number of identification events associated with the detected IP address.\n- Number of distinct IP addresses associated with the provided linked ID.\n- Number of distinct visitor IDs associated with the provided linked ID.\n\nThe `24h` interval of `distinctIp`, `distinctLinkedId`, `distinctCountry`,\n`distinctIpByLinkedId` and `distinctVisitorIdByLinkedId` will be omitted \nif the number of `events` for the visitor ID in the last 24\nhours (`events.intervals.['24h']`) is higher than 20.000.\n",
-    "properties": {
-      "distinctCountry": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "distinctIp": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "distinctIpByLinkedId": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "distinctLinkedId": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "distinctVisitorIdByLinkedId": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "events": {
-        "$ref": "#/$defs/VelocityData"
-      },
-      "ipEvents": {
-        "$ref": "#/$defs/VelocityData"
-      }
-    },
-    "required": [
-      "distinctIp",
-      "distinctLinkedId",
-      "distinctCountry",
-      "events",
-      "ipEvents",
-      "distinctIpByLinkedId",
-      "distinctVisitorIdByLinkedId"
-    ],
-    "type": "object"
+  "VpnOriginCountry": {
+    "description": "Country of the request (only for Android SDK version \u003e= 2.4.0, ISO 3166 format or unknown).\n",
+    "type": "string"
   },
-  "VelocityData": {
-    "additionalProperties": false,
+  "VpnOriginTimezone": {
+    "description": "Local timezone which is used in timezone_mismatch method.\n",
+    "type": "string"
+  },
+  "WebGlBasics": {
+    "additionalProperties": true,
+    "description": "Render and vendor strings reported by the WebGL context.",
     "properties": {
-      "intervals": {
-        "$ref": "#/$defs/VelocityIntervals"
+      "renderer": {
+        "type": "string"
+      },
+      "renderer_unmasked": {
+        "type": "string"
+      },
+      "shading_language_version": {
+        "type": "string"
+      },
+      "vendor": {
+        "type": "string"
+      },
+      "vendor_unmasked": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
       }
     },
     "type": "object"
   },
-  "VelocityIntervals": {
-    "additionalProperties": false,
-    "description": "Is absent if the velocity data could not be generated for the visitor ID.\n",
+  "WebGlExtensions": {
+    "additionalProperties": true,
+    "description": "Hashes of WebGL context attributes and extension support.",
     "properties": {
-      "1h": {
-        "type": "integer"
+      "context_attributes": {
+        "type": "string"
       },
-      "24h": {
-        "description": "The `24h` interval of `distinctIp`, `distinctLinkedId`, `distinctCountry`, `distinctIpByLinkedId` and `distinctVisitorIdByLinkedId` will be omitted if the number of `events`` for the visitor ID in the last 24 hours (`events.intervals.['24h']`) is higher than 20.000.\n",
-        "type": "integer"
+      "extension_parameters": {
+        "type": "string"
       },
-      "5m": {
-        "type": "integer"
+      "extensions": {
+        "type": "string"
+      },
+      "parameters": {
+        "type": "string"
+      },
+      "shader_precisions": {
+        "type": "string"
+      },
+      "unsupported_extensions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       }
     },
-    "required": [
-      "5m",
-      "1h"
-    ],
-    "type": "object"
-  },
-  "VirtualMachine": {
-    "additionalProperties": false,
-    "properties": {
-      "result": {
-        "description": "`true` if the request came from a browser running inside a virtual machine (e.g. VMWare), `false` otherwise.\n",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "result"
-    ],
     "type": "object"
   }
 }

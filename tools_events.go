@@ -7,7 +7,7 @@ import (
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/utils"
-	"github.com/fingerprintjs/fingerprint-pro-server-api-go-sdk/v7/sdk"
+	"github.com/fingerprintjs/go-sdk/v8"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,14 +20,14 @@ type GetEventInput struct {
 // GetEventOutput defines the output schema for the get_event tool.
 // Use `ref` tag to reference OpenAPI schemas, `description` tag for inline descriptions.
 type GetEventOutput struct {
-	Event sdk.EventsGetResponse `json:"event" ref:"EventsGetResponse"`
+	Event fingerprint.Event `json:"event" ref:"Event"`
 }
 
 type SearchEventsOutput struct {
-	Events sdk.SearchEventsResponse `json:"events" ref:"SearchEventsResponse"`
+	Events fingerprint.EventSearch `json:"events" ref:"EventSearch"`
 }
 
-func (a *App) requireServerApiClient(ctx context.Context, reqExtra *mcp.RequestExtra) (*sdk.APIClient, context.Context, error) {
+func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestExtra) (*fingerprint.Client, error) {
 	var apiKey string
 	if a.cfg.PublicMode {
 		apiKey = reqExtra.TokenInfo.Extra[tokenExtraServerApiKey].(string)
@@ -35,7 +35,7 @@ func (a *App) requireServerApiClient(ctx context.Context, reqExtra *mcp.RequestE
 		apiKey = a.cfg.ServerAPIKey
 	}
 	if apiKey == "" {
-		return nil, nil, errors.New("server API key is required")
+		return nil, errors.New("server API key is required")
 	}
 
 	var region string
@@ -45,31 +45,27 @@ func (a *App) requireServerApiClient(ctx context.Context, reqExtra *mcp.RequestE
 		region = a.cfg.Region
 	}
 	if region == "" {
-		return nil, nil, errors.New("server API region is required")
+		return nil, errors.New("server API region is required")
 	}
 
-	// Initialize Fingerprint SDK client
-	fpSDKConfig := sdk.NewConfiguration()
-
-	// Set region based on configuration
+	var fpRegion fingerprint.Region
 	switch region {
 	case "eu":
-		fpSDKConfig.ChangeRegion(sdk.RegionEU)
+		fpRegion = fingerprint.RegionEU
 	case "ap":
-		fpSDKConfig.ChangeRegion(sdk.RegionAsia)
+		fpRegion = fingerprint.RegionAsia
 	case "us":
-		fpSDKConfig.ChangeRegion(sdk.RegionUS)
+		fpRegion = fingerprint.RegionUS
 	default:
-		return nil, nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", a.cfg.Region)
+		return nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", a.cfg.Region)
 	}
 
-	fpSDKCtx := context.WithValue(
-		ctx,
-		sdk.ContextAPIKey,
-		sdk.APIKey{Key: apiKey},
+	client := fingerprint.New(
+		fingerprint.WithAPIKey(apiKey),
+		fingerprint.WithRegion(fpRegion),
 	)
 
-	return sdk.NewAPIClient(fpSDKConfig), fpSDKCtx, nil
+	return client, nil
 }
 
 func (a *App) registerGetEventTool(_ context.Context) error {
@@ -87,10 +83,8 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 			Title:           "Get Event",
 		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetEventInput) (*mcp.CallToolResult, *GetEventOutput, error) {
-		var fpClient *sdk.APIClient
-		var fpSDKCtx context.Context
-		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra); err != nil {
+		fpClient, err := a.requireFingerprintClient(ctx, req.Extra)
+		if err != nil {
 			return nil, nil, err
 		}
 		if input.EventID == "" {
@@ -98,14 +92,15 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		}
 
 		// Call Fingerprint API
-		event, _, err := fpClient.FingerprintApi.GetEvent(fpSDKCtx, input.EventID)
+		event, _, err := fpClient.GetEvent(ctx, input.EventID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get event: %w", err)
 		}
 
-		schema.FilterProducts(event.Products, input.Products)
+		schema.FilterProducts(event, input.Products)
+		schema.StripAdditionalProperties(event)
 
-		return nil, &GetEventOutput{Event: event}, nil
+		return nil, &GetEventOutput{Event: *event}, nil
 	})
 
 	return nil
@@ -126,29 +121,28 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 			Title:           "Search Event History",
 		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input schema.SearchEventInput) (*mcp.CallToolResult, *SearchEventsOutput, error) {
-		var fpClient *sdk.APIClient
-		var fpSDKCtx context.Context
-		var err error
-		if fpClient, fpSDKCtx, err = a.requireServerApiClient(ctx, req.Extra); err != nil {
+		fpClient, err := a.requireFingerprintClient(ctx, req.Extra)
+		if err != nil {
 			return nil, nil, err
 		}
 
-		limit := input.Limit
-		if limit == 0 {
+		if input.Limit == nil || *input.Limit == 0 {
 			return nil, nil, fmt.Errorf("limit must be greater than zero")
 		}
 
 		// Call Fingerprint API
-		events, _, err := fpClient.FingerprintApi.SearchEvents(fpSDKCtx, int32(limit), schema.SearchEventInputToOpts(&input))
+		searchReq := schema.SearchEventInputToRequest(&input)
+		events, _, err := fpClient.SearchEvents(ctx, searchReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to search events: %w", err)
 		}
 
 		for i := range events.Events {
-			schema.FilterProducts(events.Events[i].Products, input.Products)
+			schema.FilterProducts(&events.Events[i], input.Products)
 		}
+		schema.StripAdditionalProperties(events)
 
-		return nil, &SearchEventsOutput{Events: events}, nil
+		return nil, &SearchEventsOutput{Events: *events}, nil
 	})
 
 	return nil
