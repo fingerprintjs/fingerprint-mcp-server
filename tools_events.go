@@ -60,9 +60,16 @@ func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestE
 		return nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", a.cfg.Region)
 	}
 
-	client := fingerprint.New(
+	fpOpts := []fingerprint.ConfigOption{
 		fingerprint.WithAPIKey(apiKey),
 		fingerprint.WithRegion(fpRegion),
+	}
+	if a.cfg.ServerAPIURL != "" {
+		fpOpts = append(fpOpts, fingerprint.WithBaseURL(a.cfg.ServerAPIURL))
+	}
+
+	client := fingerprint.New(
+		fpOpts...,
 	)
 
 	return client, nil

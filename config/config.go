@@ -11,7 +11,9 @@ const STATELESS = true
 // Config holds the server configuration
 type Config struct {
 	ServerAPIKey             string `arg:"env:FINGERPRINT_SERVER_API_KEY" help:"Fingerprint Server API key (when running in private mode)"`
+	ServerAPIURL             string `arg:"env:FINGERPRINT_SERVER_API_URL" help:"Fingerprint Server API url (omit to use default)"`
 	ManagementAPIKey         string `arg:"env:FINGERPRINT_MANAGEMENT_API_KEY" help:"Fingerprint Management API key (when running in private mode)"`
+	ManagementAPIURL         string `arg:"env:FINGERPRINT_MANAGEMENT_API_URL" help:"Fingerprint Management API url (omit to use default)"`
 	Region                   string `arg:"env:FINGERPRINT_REGION" help:"Fingerprint API region. One of: us, eu or ap (when running in private mode)" default:"us"`
 	Transport                string `arg:"env:MCP_TRANSPORT" help:"MCP Transport. One of: stdio, streamable-http" default:"stdio"`
 	Port                     int    `arg:"env:MCP_PORT" help:"MCP Port" default:"8080"`

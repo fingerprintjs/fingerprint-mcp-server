@@ -20,7 +20,14 @@ func (a *App) requireMgmtClient(req *mcp.CallToolRequest) (*mgmtapi.Client, erro
 	if apiKey == "" {
 		return nil, errors.New("management API key is required")
 	}
-	return mgmtapi.NewClient(mgmtapi.WithApiKey(apiKey)), nil
+
+	mgmtApiOpts := []mgmtapi.ClientOption{
+		mgmtapi.WithApiKey(apiKey),
+	}
+	if a.cfg.ManagementAPIURL != "" {
+		mgmtApiOpts = append(mgmtApiOpts, mgmtapi.WithBaseURL(a.cfg.ManagementAPIURL))
+	}
+	return mgmtapi.NewClient(mgmtApiOpts...), nil
 }
 
 // --- Environment tool types ---
