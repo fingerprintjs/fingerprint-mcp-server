@@ -87,12 +87,13 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 				Version: cfg.Version(),
 			},
 			&mcp.ServerOptions{
-				Logger: opts.logger(),
+				//Logger: opts.logger(),
 			},
 		),
 		cfg:  cfg,
 		opts: opts,
 	}
+	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 
 	return a, nil
 }
@@ -193,6 +194,7 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Reque
 			}
 		}
 		if allEmpty {
+			a.opts.logger().Error("received a token with all parts empty")
 			return nil, auth.ErrInvalidToken
 		}
 
@@ -220,7 +222,10 @@ func (a *App) oauthEnabled() bool {
 func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return a.server
-	}, &mcp.StreamableHTTPOptions{Stateless: config.STATELESS, Logger: a.opts.logger()})
+	}, &mcp.StreamableHTTPOptions{
+		Stateless: config.STATELESS,
+		//Logger:    a.opts.logger(),
+	})
 	mux := http.NewServeMux()
 
 	if a.cfg.AuthToken != "" {
@@ -305,6 +310,55 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(
+		ctx context.Context,
+		method string,
+		req mcp.Request,
+	) (mcp.Result, error) {
+		var toolName string
+		if ctr, ok := req.(*mcp.CallToolRequest); ok {
+			toolName = ctr.Params.Name
+		}
+
+		a.opts.logger().Debug("MCP method started",
+			"method", method,
+			"tool_name", toolName,
+			"has_params", req.GetParams() != nil,
+		)
+
+		start := time.Now()
+		result, err := next(ctx, method, req)
+		duration := time.Since(start)
+
+		if err != nil {
+			a.opts.logger().Error("MCP method failed",
+				"method", method,
+				"tool_name", toolName,
+				"duration_ms", duration.Milliseconds(),
+				"err", err,
+			)
+		} else {
+			isError := false
+			var ctrError error
+			if ctr, ok := result.(*mcp.CallToolResult); ok {
+				isError = ctr.IsError
+				ctrError = ctr.GetError()
+			}
+
+			a.opts.logger().Debug("MCP method completed",
+				"method", method,
+				"tool_name", toolName,
+				"duration_ms", duration.Milliseconds(),
+				"has_result", result != nil,
+				"is_error", isError,
+				"err", ctrError,
+			)
+		}
+		return result, err
+	}
 }
 
 func (a *App) registerTools(ctx context.Context) error {

@@ -57,7 +57,7 @@ func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestE
 	case "us":
 		fpRegion = fingerprint.RegionUS
 	default:
-		return nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", a.cfg.Region)
+		return nil, fmt.Errorf("unknown region %s, must be one of: us, eu, ap", region)
 	}
 
 	fpOpts := []fingerprint.ConfigOption{
