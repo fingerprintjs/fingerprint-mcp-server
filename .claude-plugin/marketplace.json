@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "fingerprint",
+      "name": "fingerprint-mcp-server",
       "source": "./",
       "strict": true
     }
