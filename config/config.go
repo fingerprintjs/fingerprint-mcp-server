@@ -25,6 +25,7 @@ type Config struct {
 	OAuthResource            string `arg:"env:OAUTH_RESOURCE" help:"URL of this server"`
 	OAuthAuthorizationServer string `arg:"env:OAUTH_AUTH_SERVER" help:"URL of the OAuth authorization server"`
 	JwksURL                  string `arg:"env:JWKS_URL" help:"JWKS URL for JWT token verification in public mode"`
+	VersionExtra             string `arg:"env:VERSION_EXTRA" help:"Extra string to add to the MCP server version string"`
 }
 
 func (c Config) Version() string {

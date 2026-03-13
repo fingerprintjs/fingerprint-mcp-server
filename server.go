@@ -84,7 +84,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 		server: mcp.NewServer(
 			&mcp.Implementation{
 				Name:    "fingerprint-mcp-server",
-				Version: cfg.Version(),
+				Version: cfg.Version() + cfg.VersionExtra,
 			},
 			&mcp.ServerOptions{
 				//Logger: opts.logger(),
