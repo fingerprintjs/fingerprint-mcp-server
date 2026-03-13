@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "fingerprint": {
+      "type": "http",
       "url": "https://mcp.fpjs.io/mcp"
     }
   }
