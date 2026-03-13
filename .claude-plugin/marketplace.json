@@ -1,0 +1,13 @@
+{
+  "name": "Fingerprint",
+  "owner": {
+    "name": "FingerprintJS, Inc"
+  },
+  "plugins": [
+    {
+      "name": "fingerprint",
+      "source": "./",
+      "strict": true
+    }
+  ]
+}
