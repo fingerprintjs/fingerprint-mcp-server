@@ -219,26 +219,18 @@ func (a *App) oauthEnabled() bool {
 		a.cfg.JwksURL != ""
 }
 
-func (a *App) runStreamableHTTPServer(_ context.Context) error {
-	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+func (a *App) handler() http.Handler {
+	var mcpHandler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return a.server
 	}, &mcp.StreamableHTTPOptions{
 		Stateless: config.STATELESS,
-		//Logger:    a.opts.logger(),
 	})
 	mux := http.NewServeMux()
-
-	if a.cfg.AuthToken != "" {
-		a.opts.logger().Info("pass auth token in `Authorization: Bearer` http header to access this server", "auth_token", a.cfg.AuthToken)
-	}
 
 	bearerTokenOptions := &auth.RequireBearerTokenOptions{}
 
 	// only advertise OAuth when we have all we need for it
 	if a.oauthEnabled() {
-		// OAuth protected resource metadata endpoint.
-		// This endpoint provides OAuth configuration information to clients.
-		// CORS is enabled by default to support cross-origin client discovery.
 		metadata := &oauthex.ProtectedResourceMetadata{
 			Resource: a.cfg.OAuthResource,
 			AuthorizationServers: []string{
@@ -251,12 +243,22 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 		bearerTokenOptions.ResourceMetadataURL = a.cfg.OAuthResource + "/.well-known/oauth-protected-resource"
 	}
 	apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, bearerTokenOptions)
-	mux.Handle("/mcp", apiKeyAuth(handler))
+	mux.Handle("/mcp", apiKeyAuth(mcpHandler))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	return a.corsMiddleware(mux)
+}
+
+func (a *App) runStreamableHTTPServer(_ context.Context) error {
+	if a.cfg.AuthToken != "" {
+		a.opts.logger().Info("pass auth token in `Authorization: Bearer` http header to access this server", "auth_token", a.cfg.AuthToken)
+	}
+
+	handler := a.handler()
 
 	addr := ":" + strconv.Itoa(a.cfg.Port)
 
@@ -277,9 +279,9 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 
 	var err error
 	if proto == "https" {
-		err = http.ListenAndServeTLS(addr, a.cfg.TLSCert, a.cfg.TLSKey, a.corsMiddleware(mux))
+		err = http.ListenAndServeTLS(addr, a.cfg.TLSCert, a.cfg.TLSKey, handler)
 	} else {
-		err = http.ListenAndServe(addr, a.corsMiddleware(mux))
+		err = http.ListenAndServe(addr, handler)
 	}
 	return fmt.Errorf("running streamable-http server: %w", err)
 }
