@@ -1,0 +1,14 @@
+{
+  "name": "fingerprint-mcp-server",
+  "version": "0.1.13",
+  "description": "Fingerprint Device Intelligence",
+  "author": {
+    "name": "FingerprintJS, Inc",
+    "url": "https://fingerprint.com/"
+  },
+  "homepage": "https://github.com/fingerprintjs/fingerprint-mcp-server",
+  "repository": "https://github.com/fingerprintjs/fingerprint-mcp-server",
+  "keywords": ["fingerprint"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}
