@@ -133,6 +133,75 @@ func TestListTools_PrivateMode_ReadOnly(t *testing.T) {
 	}
 }
 
+func TestListTools_PrivateMode_ToolsFilter(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ServerAPIKey:     "test-server-key",
+		ServerAPIURL:     fpAPI.server.URL + "/v4",
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+		Tools:            []string{"get_event", "create_environment", "delete_api_key"},
+	})
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	names := toolNames(result)
+	expected := []string{"get_event", "create_environment", "delete_api_key"}
+	if len(names) != len(expected) {
+		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
+	}
+	for _, e := range expected {
+		if !slices.Contains(names, e) {
+			t.Errorf("expected tool %q not found in %v", e, names)
+		}
+	}
+}
+
+func TestListTools_PrivateMode_ToolsOverridesReadOnly(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ServerAPIKey:     "test-server-key",
+		ServerAPIURL:     fpAPI.server.URL + "/v4",
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+		ReadOnly:         true,
+		Tools:            []string{"get_event", "create_environment"},
+	})
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	names := toolNames(result)
+	expected := []string{"get_event", "create_environment"}
+	if len(names) != len(expected) {
+		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
+	}
+	for _, e := range expected {
+		if !slices.Contains(names, e) {
+			t.Errorf("expected tool %q not found in %v", e, names)
+		}
+	}
+}
+
 func TestListTools_PublicMode(t *testing.T) {
 	ts := setupTestServer(t, &config.Config{
 		PublicMode: true,

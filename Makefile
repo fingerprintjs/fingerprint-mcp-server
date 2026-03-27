@@ -1,3 +1,6 @@
+VERSION ?= $(shell git describe --tags --always)
+LDFLAGS ?= -X main.VERSION=$(VERSION)
+
 .PHONY: generate build test docker
 
 generate:

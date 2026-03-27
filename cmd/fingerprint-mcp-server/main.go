@@ -10,6 +10,8 @@ import (
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
 )
 
+var VERSION string
+
 func main() {
 	var logger = slog.Default()
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -20,9 +22,10 @@ func main() {
 		cfg.AuthToken = rand.Text()
 	}
 
-	logger.Info("starting fingerprint-mcp-server", "pkg_version", cfg.Version())
-
-	err := fpmcpserver.Run(context.Background(), cfg, fpmcpserver.WithLogger(logger))
+	err := fpmcpserver.Run(context.Background(), cfg,
+		fpmcpserver.WithLogger(logger),
+		fpmcpserver.WithVersion(VERSION),
+	)
 	if err != nil {
 		slog.Error("error while initializing the server", "err", err)
 		os.Exit(1)

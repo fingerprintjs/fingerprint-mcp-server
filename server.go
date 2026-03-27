@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,14 +21,16 @@ import (
 )
 
 type App struct {
-	server *mcp.Server
-	cfg    *config.Config
-	opts   *opts
-	jwks   jwk.Set
+	server  *mcp.Server
+	cfg     *config.Config
+	opts    *opts
+	jwks    jwk.Set
+	version string
 }
 
 type opts struct {
-	l *slog.Logger
+	l       *slog.Logger
+	version string
 }
 
 func (o opts) logger() *slog.Logger {
@@ -45,6 +48,12 @@ func WithLogger(logger *slog.Logger) OptFunc {
 	}
 }
 
+func WithVersion(v string) OptFunc {
+	return func(o *opts) {
+		o.version = v
+	}
+}
+
 func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 	opts := &opts{}
 	for _, f := range options {
@@ -54,6 +63,8 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 	if err != nil {
 		return err
 	}
+
+	opts.logger().Info("starting fingerprint-mcp-server", "version", app.version)
 
 	if config.JwksURL != "" {
 		if err := app.initJWKS(ctx); err != nil {
@@ -80,18 +91,23 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if cfg == nil {
 		cfg = &config.Config{}
 	}
+	v := opts.version
+	if v == "" {
+		v = Version()
+	}
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
 				Name:    "fingerprint-mcp-server",
-				Version: cfg.Version() + cfg.VersionExtra,
+				Version: v,
 			},
 			&mcp.ServerOptions{
 				//Logger: opts.logger(),
 			},
 		),
-		cfg:  cfg,
-		opts: opts,
+		cfg:     cfg,
+		opts:    opts,
+		version: v,
 	}
 	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 
@@ -363,32 +379,61 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
+// readOnlyTools is the set of tools registered when --read-only is used.
+var readOnlyTools = []string{
+	"get_event",
+	"search_events",
+	"list_environments",
+	"list_api_keys",
+	"get_api_key",
+}
+
 func (a *App) registerTools(ctx context.Context) error {
-	var errs []error
+	// Resolve the tool filter: explicit --tools takes precedence, then --read-only.
+	allowedTools := a.cfg.Tools
+	if len(allowedTools) == 0 && a.cfg.ReadOnly {
+		allowedTools = readOnlyTools
+	}
+
+	shouldRegister := func(name string) bool {
+		if len(allowedTools) == 0 {
+			return true
+		}
+		return slices.Contains(allowedTools, name)
+	}
+
+	type toolEntry struct {
+		name     string
+		register func() error
+	}
+
+	var candidates []toolEntry
 
 	if a.cfg.PublicMode || (!a.cfg.PublicMode && a.cfg.ServerAPIKey != "") {
-		errs = append(errs,
-			a.registerGetEventTool(ctx),
-			a.registerSearchEventsTool(ctx),
+		candidates = append(candidates,
+			toolEntry{"get_event", func() error { return a.registerGetEventTool(ctx) }},
+			toolEntry{"search_events", func() error { return a.registerSearchEventsTool(ctx) }},
 		)
 	}
 
 	if a.cfg.PublicMode || (!a.cfg.PublicMode && a.cfg.ManagementAPIKey != "") {
-		errs = append(errs,
-			a.registerListEnvironmentsTool(ctx),
-			a.registerListAPIKeysTool(ctx),
-			a.registerGetAPIKeyTool(ctx),
+		candidates = append(candidates,
+			toolEntry{"list_environments", func() error { return a.registerListEnvironmentsTool(ctx) }},
+			toolEntry{"list_api_keys", func() error { return a.registerListAPIKeysTool(ctx) }},
+			toolEntry{"get_api_key", func() error { return a.registerGetAPIKeyTool(ctx) }},
+			toolEntry{"create_environment", func() error { return a.registerCreateEnvironmentTool(ctx) }},
+			toolEntry{"update_environment", func() error { return a.registerUpdateEnvironmentTool(ctx) }},
+			toolEntry{"delete_environment", func() error { return a.registerDeleteEnvironmentTool(ctx) }},
+			toolEntry{"create_api_key", func() error { return a.registerCreateAPIKeyTool(ctx) }},
+			toolEntry{"update_api_key", func() error { return a.registerUpdateAPIKeyTool(ctx) }},
+			toolEntry{"delete_api_key", func() error { return a.registerDeleteAPIKeyTool(ctx) }},
 		)
+	}
 
-		if !a.cfg.ReadOnly {
-			errs = append(errs,
-				a.registerCreateEnvironmentTool(ctx),
-				a.registerUpdateEnvironmentTool(ctx),
-				a.registerDeleteEnvironmentTool(ctx),
-				a.registerCreateAPIKeyTool(ctx),
-				a.registerUpdateAPIKeyTool(ctx),
-				a.registerDeleteAPIKeyTool(ctx),
-			)
+	var errs []error
+	for _, c := range candidates {
+		if shouldRegister(c.name) {
+			errs = append(errs, c.register())
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/mgmtapi"
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/utils"
@@ -23,6 +24,12 @@ func (a *App) requireMgmtClient(req *mcp.CallToolRequest) (*mgmtapi.Client, erro
 
 	mgmtApiOpts := []mgmtapi.ClientOption{
 		mgmtapi.WithApiKey(apiKey),
+		mgmtapi.WithHTTPClient(&http.Client{
+			Transport: &iiTransport{
+				base:    http.DefaultTransport,
+				version: a.version,
+			},
+		}),
 	}
 	if a.cfg.ManagementAPIURL != "" {
 		mgmtApiOpts = append(mgmtApiOpts, mgmtapi.WithBaseURL(a.cfg.ManagementAPIURL))

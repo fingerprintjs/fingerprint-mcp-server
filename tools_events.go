@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/utils"
@@ -63,6 +64,12 @@ func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestE
 	fpOpts := []fingerprint.ConfigOption{
 		fingerprint.WithAPIKey(apiKey),
 		fingerprint.WithRegion(fpRegion),
+		fingerprint.WithHTTPClient(&http.Client{
+			Transport: &iiTransport{
+				base:    http.DefaultTransport,
+				version: a.version,
+			},
+		}),
 	}
 	if a.cfg.ServerAPIURL != "" {
 		fpOpts = append(fpOpts, fingerprint.WithBaseURL(a.cfg.ServerAPIURL))
@@ -153,4 +160,19 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	})
 
 	return nil
+}
+
+// iiTransport is an http.RoundTripper that appends the "ii" query parameter
+// to every outgoing request, reporting the MCP server version to the backend.
+type iiTransport struct {
+	base    http.RoundTripper
+	version string
+}
+
+func (t *iiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r := req.Clone(req.Context())
+	q := r.URL.Query()
+	q.Add("ii", "fingerprint-mcp-server/"+t.version)
+	r.URL.RawQuery = q.Encode()
+	return t.base.RoundTrip(r)
 }
