@@ -236,10 +236,15 @@ func (a *App) oauthEnabled() bool {
 }
 
 func (a *App) handler() http.Handler {
+	// All authentication data is passed via Authorization headers, so we can disable cross origin protection
+	crossOriginProtection := http.NewCrossOriginProtection()
+	crossOriginProtection.AddInsecureBypassPattern("/")
+
 	var mcpHandler http.Handler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return a.server
 	}, &mcp.StreamableHTTPOptions{
-		Stateless: config.STATELESS,
+		Stateless:             config.STATELESS,
+		CrossOriginProtection: crossOriginProtection,
 	})
 	mux := http.NewServeMux()
 
