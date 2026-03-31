@@ -1,7 +1,5 @@
 # Fingerprint MCP Server
 
-An MCP (Model Context Protocol) server for [Fingerprint](https://fingerprint.com/) - a device intelligence platform for web security and anti-fraud.
-
 ## Features
 
 - **Event tools**: Retrieve and search identification events with full smart signal data
@@ -9,8 +7,9 @@ An MCP (Model Context Protocol) server for [Fingerprint](https://fingerprint.com
 - **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
-- **Public mode** for multi-tenant deployments (API keys passed via bearer token)
-- **Read-only mode** to expose only read tools
+- OAuth2 login supported
+- **Public mode** for multi-tenant deployments (API keys passed via JWT bearer token)
+- **Tool filtering** to control which tools are exposed
 - Configurable via environment variables or CLI flags
 - Docker support for easy deployment
 
@@ -27,30 +26,42 @@ go install github.com/fingerprintjs/fingerprint-mcp-server@latest
 ```bash
 git clone https://github.com/fingerprintjs/fingerprint-mcp-server.git
 cd fingerprint-mcp-server
-go generate ./...
-go build -o fingerprint-mcp-server .
+make build
 ```
 
-`go generate` downloads the OpenAPI spec and generates schema files under `internal/schema/`. These are gitignored and must be regenerated before building.
+`make build` runs `go generate` (to download the OpenAPI spec and generate schema files under `internal/schema/`) and then builds the binary.
 
 ## Configuration
 
 The server can be configured via CLI flags or environment variables:
 
-| CLI Flag | Environment Variable | Default | Description                                                    |
-|----------|---------------------|---------|----------------------------------------------------------------|
-| `--server-api-key` | `FINGERPRINT_SERVER_API_KEY` | (required in private mode) | Fingerprint Server API key                                     |
-| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` | | Fingerprint Management API key (enables management tools)      |
-| `--region` | `FINGERPRINT_REGION` | `us` | API region: `us`, `eu`, or `ap`                                |
-| `--transport` | `MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `streamable-http`                        |
-| `--port` | `MCP_PORT` | `8080` | Port for HTTP/HTTPS server                                     |
-| `--tls-cert` | `MCP_TLS_CERT` | | Path to TLS certificate file                                   |
-| `--tls-key` | `MCP_TLS_KEY` | | Path to TLS private key file                                   |
-| `--read-only` | `MCP_READ_ONLY` | `false` | Only expose read tools (no create/update/delete)               |
-| `--public` | `MCP_PUBLIC` | `false` | Public mode: expect API keys in HTTP headers instead of config |
-| `--auth-token` | `MCP_AUTH_TOKEN` | (auto-generated) | Bearer token required to access the server                     |
+| CLI Flag               | Environment Variable             | Default                          | Description                                                              |
+|------------------------|----------------------------------|----------------------------------|--------------------------------------------------------------------------|
+| `--server-api-key`     | `FINGERPRINT_SERVER_API_KEY`     |                                  | Fingerprint Server API key (private mode)                                |
+| `--server-api-url`     | `FINGERPRINT_SERVER_API_URL`     | api.fpjs.io                      | Custom Server API URL (omit to use default)                              |
+| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` |                                  | Fingerprint Management API key (private mode)                            |
+| `--management-api-url` | `FINGERPRINT_MANAGEMENT_API_URL` | management-api.fpjs.io           | Custom Management API URL (omit to use default)                          |
+| `--region`             | `FINGERPRINT_REGION`             | `us`                             | API region: `us`, `eu`, or `ap` (private mode)                           |
+| `--transport`          | `MCP_TRANSPORT`                  | `stdio`                          | Transport: `stdio` or `streamable-http`                                  |
+| `--port`               | `MCP_PORT`                       | `8080`                           | Port for HTTP/HTTPS server                                               |
+| `--tls-cert`           | `MCP_TLS_CERT`                   |                                  | Path to TLS certificate file                                             |
+| `--tls-key`            | `MCP_TLS_KEY`                    |                                  | Path to TLS private key file                                             |
+| `--read-only`          | `MCP_READ_ONLY`                  | `false`                          | Only expose read tools (shorthand for `--tools` with read-only tools)    |
+| `--tools`              | `MCP_TOOLS`                      |                                  | Comma-separated list of tool names to register (overrides `--read-only`) |
+| `--public`             | `MCP_PUBLIC`                     | `false`                          | Public mode: extract API keys from JWT bearer tokens                     |
+| `--auth-token`         | `MCP_AUTH_TOKEN`                 | (auto-generated in private mode) | Bearer token required to access the server (private mode)                |
+| `--jwt-public-key`     | `FINGERPRINT_PUBLIC_KEY`         |                                  | PEM-encoded ES256 public key for verifying Fingerprint-issued JWT tokens |
+| `--oauth-resource`     | `OAUTH_RESOURCE`                 |                                  | URL of this server (for OAuth metadata)                                  |
+| `--oauth-auth-server`  | `OAUTH_AUTH_SERVER`              |                                  | URL of the OAuth authorization server                                    |
+| `--jwks-url`           | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
 
 ## Usage
+
+### Private mode vs. Public mode
+
+Private mode means the server runs with its API keys pre-configured (FINGERPRINT_SERVER_API_KEY and FINGERPRINT_MANAGEMENT_API_KEY). This mode is useful when you are running a local instance intended to be used within your organization: server automatically uses those specified in the config. In this mode, auth token (MCP_AUTH_TOKEN) is enforced to protect your instance of the MCP server from unauthenticated use.
+
+Public mode is how https://mcp.fpjs.io/mcp is run. It is meant to be used in situations when a single instance can be used by different users from different organizations, each with their own API keys. In this mode, API keys are extracted from JWT access tokens that are issued by https://dashboard.fingerprint.com or by user following the OAuth2 flow.
 
 ### Stdio Transport (Default)
 
@@ -76,6 +87,20 @@ Provide TLS certificate and key files to enable HTTPS:
 ./fingerprint-mcp-server --transport=streamable-http \
   --tls-cert=cert.pem --tls-key=key.pem
 ```
+
+### Tool Filtering
+
+By default, all tools are registered based on which API keys are configured. You can restrict which tools are exposed:
+
+```bash
+# Only expose read-only tools
+./fingerprint-mcp-server --read-only
+
+# Expose a specific set of tools
+./fingerprint-mcp-server --tools=get_event,search_events,list_environments
+```
+
+When `--tools` is set, it overrides `--read-only`.
 
 ## Docker
 
@@ -128,7 +153,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
     "fingerprint": {
       "url": "https://url/mcp",
       "headers": {
-        "Authorization": "Bearer <server-api-key>-<management-api-key>-<region>"
+        "Authorization": "Bearer <auth-token>"
       }
     }
   }
@@ -149,71 +174,21 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-### Event Tools
+Event tools require a Server API key. Management tools require a Management API key. Write tools (create/update/delete) are hidden when `--read-only` is set or excluded via `--tools`.
 
-These tools require a Server API key.
-
-#### get_event
-
-Retrieves detailed information about a specific identification event.
-
-**Input:**
-- `event_id` (string, required): The unique identifier of the identification event
-- `products` (string[], optional): Product fields to include in the response
-
-#### search_events
-
-Searches for events matching various filters with pagination.
-
-**Input:**
-- `limit` (integer, required): Number of events to return
-- `visitor_id`, `ip_address`, `linked_id` — identity filters
-- `bot`, `vpn`, `proxy`, `incognito`, `tampering`, and other smart signal filters
-- `start`, `end` — time range in Unix milliseconds
-- `pagination_key` — for paginating through results
-- `products` (string[], optional): Product fields to include in the response
-
-Both tools return comprehensive event data including visitor identification, browser details, geolocation, bot detection, and smart signals.
-
-### Management Tools
-
-These tools require a Management API key. Write tools are hidden when `--read-only` is set.
-
-#### list_environments
-
-Lists all workspace environments with pagination support.
-
-#### list_api_keys
-
-Lists API keys with optional filters by type (`public`/`secret`/`proxy`), status (`enabled`/`disabled`), and environment.
-
-#### get_api_key
-
-Retrieves detailed information about a specific API key by its ID.
-
-#### create_environment
-
-Creates a new workspace environment with name, description, and optional rate limits.
-
-#### update_environment
-
-Updates an existing workspace environment.
-
-#### delete_environment
-
-Deletes a workspace environment (only if it has no active API keys).
-
-#### create_api_key
-
-Creates a new API key of a given type (`public`/`secret`/`proxy`).
-
-#### update_api_key
-
-Updates an existing API key (name, description, status, rate limit).
-
-#### delete_api_key
-
-Deletes an API key. This operation is irreversible.
+| Tool                 | Description                                                         |
+|----------------------|---------------------------------------------------------------------|
+| `get_event`          | Retrieve a specific identification event by ID                      |
+| `search_events`      | Search events with filters (visitor, IP, smart signals, time range) |
+| `list_environments`  | List workspace environments with pagination                         |
+| `get_api_key`        | Get details of a specific API key                                   |
+| `list_api_keys`      | List API keys with optional type/status/environment filters         |
+| `create_environment` | Create a new workspace environment                                  |
+| `update_environment` | Update an existing workspace environment                            |
+| `delete_environment` | Delete a workspace environment                                      |
+| `create_api_key`     | Create a new API key (public/secret/proxy)                          |
+| `update_api_key`     | Update an existing API key                                          |
+| `delete_api_key`     | Delete an API key (irreversible)                                    |
 
 ## Available Resources
 
@@ -225,16 +200,6 @@ Deletes an API key. This operation is irreversible.
 ## Available Prompts
 
 - **`onboarding`** — A guided walkthrough for integrating Fingerprint into a project, covering JavaScript Agent installation, API key setup, and verification steps.
-
-## Regional API Endpoints
-
-Fingerprint provides regional API endpoints for data locality requirements:
-
-- **US (default)**: `api.fpjs.io`
-- **EU**: `eu.api.fpjs.io`
-- **Asia Pacific**: `ap.api.fpjs.io`
-
-Use the `--region` flag or `FINGERPRINT_REGION` environment variable to select your region.
 
 ## License
 

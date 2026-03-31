@@ -74,7 +74,7 @@
       "type": "integer"
     },
     "linked_id": {
-      "description": "Filter events by your custom identifier.\n\nYou can use [linked Ids](https://dev.fingerprint.com/reference/get-function#linkedid) to associate identification requests with your own identifier, for example, session Id, purchase Id, or transaction Id. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
+      "description": "Filter events by your custom identifier.\n\nYou can use [linked Ids](https://docs.fingerprint.com/reference/js-agent-v4-get-function#linkedid) to associate identification requests with your own identifier, for example, session Id, purchase Id, or transaction Id. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
       "type": "string"
     },
     "location_spoofing": {
@@ -139,7 +139,7 @@
       "type": "integer"
     },
     "suspect": {
-      "description": "Filter events previously tagged as suspicious via the [Update API](https://dev.fingerprint.com/reference/updateevent).\n\u003e Note: When using this parameter, only events with the `suspect` property explicitly set to `true` or `false` are returned. Events with undefined `suspect` property are left out of the response.\n",
+      "description": "Filter events previously tagged as suspicious via the [Update API](https://docs.fingerprint.com/reference/server-api-v4-update-event).\n\u003e Note: When using this parameter, only events with the `suspect` property explicitly set to `true` or `false` are returned. Events with undefined `suspect` property are left out of the response.\n",
       "type": "boolean"
     },
     "tampering": {
@@ -165,7 +165,7 @@
       "type": "boolean"
     },
     "visitor_id": {
-      "description": "Unique [visitor identifier](https://dev.fingerprint.com/reference/get-function#visitorid) issued by Fingerprint Identification and all active Smart Signals.\nFilter for events matching this `visitor_id`.\n",
+      "description": "Unique [visitor identifier](https://docs.fingerprint.com/reference/js-agent-v4-get-function#visitor_id) issued by Fingerprint Identification and all active Smart Signals.\nFilter for events matching this `visitor_id`.\n",
       "type": "string"
     },
     "vpn": {
