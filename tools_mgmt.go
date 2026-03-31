@@ -28,6 +28,7 @@ func (a *App) requireMgmtClient(req *mcp.CallToolRequest) (*mgmtapi.Client, erro
 			Transport: &iiTransport{
 				base:    http.DefaultTransport,
 				version: a.version,
+				appName: a.appName,
 			},
 		}),
 	}

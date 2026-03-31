@@ -27,11 +27,13 @@ type App struct {
 	jwks         jwk.Set
 	jwtPublicKey jwk.Key
 	version      string
+	appName      string
 }
 
 type opts struct {
 	l       *slog.Logger
 	version string
+	appName string
 }
 
 func (o opts) logger() *slog.Logger {
@@ -52,6 +54,12 @@ func WithLogger(logger *slog.Logger) OptFunc {
 func WithVersion(v string) OptFunc {
 	return func(o *opts) {
 		o.version = v
+	}
+}
+
+func WithAppName(appName string) OptFunc {
+	return func(o *opts) {
+		o.appName = appName
 	}
 }
 
@@ -96,10 +104,14 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if v == "" {
 		v = Version()
 	}
+	appName := opts.appName
+	if appName == "" {
+		appName = "fingerprint-mcp-server"
+	}
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
-				Name:    "fingerprint-mcp-server",
+				Name:    appName,
 				Version: v,
 			},
 			&mcp.ServerOptions{
@@ -109,6 +121,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 		cfg:     cfg,
 		opts:    opts,
 		version: v,
+		appName: appName,
 	}
 	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 

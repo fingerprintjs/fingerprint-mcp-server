@@ -68,6 +68,7 @@ func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestE
 			Transport: &iiTransport{
 				base:    http.DefaultTransport,
 				version: a.version,
+				appName: a.appName,
 			},
 		}),
 	}
@@ -167,12 +168,13 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 type iiTransport struct {
 	base    http.RoundTripper
 	version string
+	appName string
 }
 
 func (t *iiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	r := req.Clone(req.Context())
 	q := r.URL.Query()
-	q.Add("ii", "fingerprint-mcp-server/"+t.version)
+	q.Add("ii", t.appName+"/"+t.version)
 	r.URL.RawQuery = q.Encode()
 	return t.base.RoundTrip(r)
 }
