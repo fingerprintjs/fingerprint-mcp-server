@@ -12,6 +12,7 @@
 
 ## Features
 
+- Run locally or use managed instance at https://mcp.fpjs.io/mcp
 - **Event tools**: Retrieve and search identification events with full smart signal data
 - **Management tools**: Manage workspace environments and API keys
 - **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
@@ -69,7 +70,7 @@ The server can be configured via CLI flags or environment variables:
 
 ### Private mode vs. Public mode
 
-Private mode means the server runs with its API keys pre-configured (FINGERPRINT_SERVER_API_KEY and FINGERPRINT_MANAGEMENT_API_KEY). This mode is useful when you are running a local instance intended to be used within your organization: server automatically uses those specified in the config. In this mode, auth token (MCP_AUTH_TOKEN) is enforced to protect your instance of the MCP server from unauthenticated use.
+Private mode means the server runs with its API keys pre-configured (`FINGERPRINT_SERVER_API_KEY` and `FINGERPRINT_MANAGEMENT_API_KEY`). This mode is useful when you are running a local instance intended to be used within your organization: server automatically uses those specified in the config. In this mode, auth token (`MCP_AUTH_TOKEN`) is enforced to protect your instance of the MCP server from unauthenticated use.
 
 Public mode is how https://mcp.fpjs.io/mcp is run. It is meant to be used in situations when a single instance can be used by different users from different organizations, each with their own API keys. In this mode, API keys are extracted from JWT access tokens that are issued by https://dashboard.fingerprint.com or by user following the OAuth2 flow.
 
