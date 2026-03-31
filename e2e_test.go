@@ -2,12 +2,19 @@ package fpmcpserver
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 // --- Group 1: ListTools ---
@@ -203,11 +210,15 @@ func TestListTools_PrivateMode_ToolsOverridesReadOnly(t *testing.T) {
 }
 
 func TestListTools_PublicMode(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+
 	ts := setupTestServer(t, &config.Config{
-		PublicMode: true,
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 	})
 
-	session := mustConnectMCPClient(t, ts.URL, "srvKey-mgmtKey-us")
+	token := signFpjsJWT(t, privKey, "srvKey-mgmtKey-us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	result, err := session.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
@@ -279,28 +290,17 @@ func TestAuth_PrivateMode_NoToken(t *testing.T) {
 	}
 }
 
-func TestAuth_PublicMode_SimpleToken(t *testing.T) {
-	ts := setupTestServer(t, &config.Config{
-		PublicMode: true,
-	})
-
-	session := mustConnectMCPClient(t, ts.URL, "srvKey-mgmtKey-us")
-	result, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("ListTools failed: %v", err)
-	}
-	if len(result.Tools) == 0 {
-		t.Error("expected tools but got none")
-	}
-}
-
 func TestAuth_PublicMode_AllEmpty(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+
 	ts := setupTestServer(t, &config.Config{
-		PublicMode: true,
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 	})
 
 	// "--" means all parts empty → should be rejected
-	_, err := tryConnectMCPClient(t, ts.URL, "--")
+	token := signFpjsJWT(t, privKey, "--", fpjsJWTIssuer)
+	_, err := tryConnectMCPClient(t, ts.URL, token)
 	if err == nil {
 		t.Fatal("expected connection to fail with all-empty token")
 	}
@@ -312,13 +312,16 @@ func TestAuth_PublicMode_AllEmpty(t *testing.T) {
 func TestAuth_PublicMode_PartialToken_ServerOnly(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
+	privKey, pubPEM := generateES256KeyPEM(t)
 
 	ts := setupTestServer(t, &config.Config{
 		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 		ServerAPIURL: fpAPI.server.URL + "/v4",
 	})
 
-	session := mustConnectMCPClient(t, ts.URL, "srvKey--us")
+	token := signFpjsJWT(t, privKey, "srvKey--us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	// Event tools should work
 	result := mustCallTool(t, session, "get_event", map[string]any{"event_id": "test-123"})
 	if result.IsError {
@@ -335,13 +338,16 @@ func TestAuth_PublicMode_PartialToken_ServerOnly(t *testing.T) {
 func TestAuth_PublicMode_PartialToken_MgmtOnly(t *testing.T) {
 	mgmtAPI := newMockManagementAPI()
 	defer mgmtAPI.close()
+	privKey, pubPEM := generateES256KeyPEM(t)
 
 	ts := setupTestServer(t, &config.Config{
 		PublicMode:       true,
+		JwtPublicKey:     pubPEM,
 		ManagementAPIURL: mgmtAPI.server.URL,
 	})
 
-	session := mustConnectMCPClient(t, ts.URL, "-mgmtKey-us")
+	token := signFpjsJWT(t, privKey, "-mgmtKey-us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 
 	// Management tools should work
 	result := mustCallTool(t, session, "list_environments", map[string]any{})
@@ -356,14 +362,91 @@ func TestAuth_PublicMode_PartialToken_MgmtOnly(t *testing.T) {
 	}
 }
 
-func TestAuth_PublicMode_InvalidFormat(t *testing.T) {
+func TestAuth_PublicMode_InvalidToken(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+
 	ts := setupTestServer(t, &config.Config{
-		PublicMode: true,
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 	})
 
-	_, err := tryConnectMCPClient(t, ts.URL, "too-many-dashes-here")
+	// Not a JWT at all
+	_, err := tryConnectMCPClient(t, ts.URL, "not-a-jwt")
 	if err == nil {
-		t.Fatal("expected connection to fail with invalid format token")
+		t.Fatal("expected connection to fail with invalid token")
+	}
+
+	// JWT with wrong subject format (no dashes)
+	token := signFpjsJWT(t, privKey, "nodashes", fpjsJWTIssuer)
+	_, err = tryConnectMCPClient(t, ts.URL, token)
+	if err == nil {
+		t.Fatal("expected connection to fail with invalid subject format")
+	}
+}
+
+func generateES256KeyPEM(t *testing.T) (privateKey *ecdsa.PrivateKey, publicKeyPEM string) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generating ES256 key: %v", err)
+	}
+	pubJWK, err := jwk.FromRaw(&priv.PublicKey)
+	if err != nil {
+		t.Fatalf("creating JWK from public key: %v", err)
+	}
+	pem, err := jwk.EncodePEM(pubJWK)
+	if err != nil {
+		t.Fatalf("encoding public key to PEM: %v", err)
+	}
+	return priv, string(pem)
+}
+
+func signFpjsJWT(t *testing.T, privateKey *ecdsa.PrivateKey, subject, issuer string) string {
+	t.Helper()
+	token, err := jwt.NewBuilder().
+		Subject(subject).
+		Issuer(issuer).
+		Expiration(time.Now().Add(time.Hour)).
+		Build()
+	if err != nil {
+		t.Fatalf("building JWT: %v", err)
+	}
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, privateKey))
+	if err != nil {
+		t.Fatalf("signing JWT: %v", err)
+	}
+	return string(signed)
+}
+
+func TestAuth_PublicMode_FpjsJWT_InvalidIssuer(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+
+	ts := setupTestServer(t, &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+	})
+
+	token := signFpjsJWT(t, privKey, "srvKey-mgmtKey-us", "https://evil.example.com")
+	_, err := tryConnectMCPClient(t, ts.URL, token)
+	if err == nil {
+		t.Fatal("expected connection to fail with invalid issuer")
+	}
+}
+
+func TestAuth_PublicMode_FpjsJWT_InvalidSignature(t *testing.T) {
+	_, pubPEM := generateES256KeyPEM(t)
+	otherKey, _ := generateES256KeyPEM(t)
+
+	ts := setupTestServer(t, &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+	})
+
+	// Sign with a different key than what the server expects
+	token := signFpjsJWT(t, otherKey, "srvKey-mgmtKey-us", fpjsJWTIssuer)
+	_, err := tryConnectMCPClient(t, ts.URL, token)
+	if err == nil {
+		t.Fatal("expected connection to fail with invalid signature")
 	}
 }
 
@@ -447,14 +530,17 @@ func TestGetEvent_APIError(t *testing.T) {
 func TestGetEvent_PublicMode_KeyExtraction(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
+	privKey, pubPEM := generateES256KeyPEM(t)
 
 	ts := setupTestServer(t, &config.Config{
 		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 		ServerAPIURL: fpAPI.server.URL + "/v4",
 	})
 
-	// Bearer "testKey-mgmt-us" → server key should be "testKey"
-	session := mustConnectMCPClient(t, ts.URL, "testKey-mgmt-us")
+	// JWT subject "testKey-mgmt-us" → server key should be "testKey"
+	token := signFpjsJWT(t, privKey, "testKey-mgmt-us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	result := mustCallTool(t, session, "get_event", map[string]any{"event_id": "evt-1"})
 
 	if result.IsError {
@@ -511,14 +597,17 @@ func TestSearchEvents_ZeroLimit(t *testing.T) {
 func TestGetEvent_PublicMode_InvalidRegion(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
+	privKey, pubPEM := generateES256KeyPEM(t)
 
 	ts := setupTestServer(t, &config.Config{
 		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 		ServerAPIURL: fpAPI.server.URL + "/v4",
 	})
 
-	// Bearer "srvKey-mgmt-xx" → region "xx" is invalid
-	session := mustConnectMCPClient(t, ts.URL, "srvKey-mgmt-xx")
+	// JWT subject "srvKey-mgmt-xx" → region "xx" is invalid
+	token := signFpjsJWT(t, privKey, "srvKey-mgmt-xx", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	result := mustCallTool(t, session, "get_event", map[string]any{"event_id": "evt-1"})
 
 	if !result.IsError {
@@ -725,14 +814,17 @@ func TestDeleteAPIKey_Success(t *testing.T) {
 func TestMgmtTool_PublicMode_KeyExtraction(t *testing.T) {
 	mgmtAPI := newMockManagementAPI()
 	defer mgmtAPI.close()
+	privKey, pubPEM := generateES256KeyPEM(t)
 
 	ts := setupTestServer(t, &config.Config{
 		PublicMode:       true,
+		JwtPublicKey:     pubPEM,
 		ManagementAPIURL: mgmtAPI.server.URL,
 	})
 
-	// Bearer "srv-mgmtTestKey-us" → mgmt key should be "mgmtTestKey"
-	session := mustConnectMCPClient(t, ts.URL, "srv-mgmtTestKey-us")
+	// JWT subject "srv-mgmtTestKey-us" → mgmt key should be "mgmtTestKey"
+	token := signFpjsJWT(t, privKey, "srv-mgmtTestKey-us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	result := mustCallTool(t, session, "list_environments", map[string]any{})
 
 	if result.IsError {
@@ -747,12 +839,16 @@ func TestMgmtTool_PublicMode_KeyExtraction(t *testing.T) {
 }
 
 func TestMgmtTool_PublicMode_NoMgmtKey(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+
 	ts := setupTestServer(t, &config.Config{
-		PublicMode: true,
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
 	})
 
-	// Bearer "srvKey--us" → no mgmt key
-	session := mustConnectMCPClient(t, ts.URL, "srvKey--us")
+	// JWT subject "srvKey--us" → no mgmt key
+	token := signFpjsJWT(t, privKey, "srvKey--us", fpjsJWTIssuer)
+	session := mustConnectMCPClient(t, ts.URL, token)
 	result := mustCallTool(t, session, "list_environments", map[string]any{})
 
 	if !result.IsError {

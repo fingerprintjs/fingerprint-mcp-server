@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -21,11 +21,12 @@ import (
 )
 
 type App struct {
-	server  *mcp.Server
-	cfg     *config.Config
-	opts    *opts
-	jwks    jwk.Set
-	version string
+	server       *mcp.Server
+	cfg          *config.Config
+	opts         *opts
+	jwks         jwk.Set
+	jwtPublicKey jwk.Key
+	version      string
 }
 
 type opts struct {
@@ -111,6 +112,12 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	}
 	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 
+	if cfg.JwtPublicKey != "" {
+		if err := a.initJwtPublicKey(); err != nil {
+			return nil, err
+		}
+	}
+
 	return a, nil
 }
 
@@ -121,16 +128,6 @@ func (a *App) runStdioServer(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (a *App) validateAuthToken(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if a.cfg.AuthToken != "" && request.Header.Get("Authorization") != fmt.Sprintf("Bearer %s", a.cfg.AuthToken) {
-			writer.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(writer, request)
-	})
 }
 
 func (a *App) initJWKS(ctx context.Context) error {
@@ -150,15 +147,71 @@ func (a *App) initJWKS(ctx context.Context) error {
 	return nil
 }
 
+const fpjsJWTIssuer = "https://api.fpjs.pro"
+
+func (a *App) initJwtPublicKey() error {
+	key, err := jwk.ParseKey([]byte(a.cfg.JwtPublicKey), jwk.WithPEM(true))
+	if err != nil {
+		return fmt.Errorf("parsing JWT public key PEM: %w", err)
+	}
+	a.jwtPublicKey = key
+	a.opts.logger().Info("JWT public key initialized")
+	return nil
+}
+
+// verifyJWT parses and verifies a JWT token. It peeks at the issuer claim
+// to determine which key to use for signature verification:
+//   - fpjsJWTIssuer → verify with the configured ES256 public key
+//   - OAuthAuthorizationServer → verify with the JWKS keyset
+func (a *App) verifyJWT(rawToken string) (jwt.Token, error) {
+	// Parse without verification to peek at the issuer.
+	unverified, err := jwt.Parse([]byte(rawToken), jwt.WithVerify(false), jwt.WithValidate(false))
+	if err != nil {
+		return nil, fmt.Errorf("parsing JWT: %w", err)
+	}
+
+	issuer := unverified.Issuer()
+
+	switch {
+	case issuer == fpjsJWTIssuer && a.jwtPublicKey != nil:
+		return jwt.Parse([]byte(rawToken),
+			jwt.WithKey(jwa.ES256, a.jwtPublicKey),
+			jwt.WithValidate(true),
+			jwt.WithIssuer(fpjsJWTIssuer),
+		)
+	case issuer == a.cfg.OAuthAuthorizationServer && a.oauthEnabled() && a.jwks != nil:
+		return jwt.Parse([]byte(rawToken),
+			jwt.WithKeySet(a.jwks),
+			jwt.WithValidate(true),
+			jwt.WithIssuer(a.cfg.OAuthAuthorizationServer),
+		)
+	default:
+		return nil, fmt.Errorf("no key configured for JWT issuer %q", issuer)
+	}
+}
+
 const tokenExtraServerApiKey = "server_api_key"
 const tokenExtraMgmtApiKey = "mgmt_api_key"
 const tokenExtraRegionKey = "region"
+const tokenExtraSubscriptionID = "subscription_id"
 
-var simpleTokenRe = regexp.MustCompile(`^([a-zA-Z0-9]*)-([a-zA-Z0-9]*)-([a-zA-Z0-9]*)$`)
+const claimSubscriptionID = "urn:fingerprint:sub_id"
+
+// parseKeysDashSeparated splits s into exactly 3 dash-separated parts
+// representing serverAPIKey, managementAPIKey, and region.
+// Returns an error if s doesn't contain exactly 3 parts or all parts are empty.
+func parseKeysDashSeparated(s string) ([]string, error) {
+	parts := strings.SplitN(s, "-", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("expected 3 dash-separated parts, got %d", len(parts))
+	}
+	if parts[0] == "" && parts[1] == "" && parts[2] == "" {
+		return nil, fmt.Errorf("all parts are empty")
+	}
+	return parts, nil
+}
 
 func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Request) (*auth.TokenInfo, error) {
-	var expiration = time.Now().Add(24 * time.Hour) // most tokens never expire
-
 	if a.cfg.AuthToken != "" {
 		// Auth token pre-configured, expect it to be passed (likely we're in private mode but in theory could be public too)
 		if a.cfg.AuthToken != authToken {
@@ -166,61 +219,39 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Reque
 		}
 
 		return &auth.TokenInfo{
-			Expiration: expiration,
+			Expiration: time.Now().Add(24 * time.Hour),
 		}, nil
 	} else if a.cfg.PublicMode {
 		// Public mode without a pre-configured auth token.
-		// API keys are extracted from the bearer token. Two formats are supported:
-		// 1) Simple: "serverKey-mgmtKey-region" (dash-separated, alphanumeric, any part can be empty)
-		// 2) JWT: a signed JWT whose subject encodes the same three parts
+		// API keys are extracted from a JWT whose subject encodes three dash-separated parts:
+		// serverAPIKey-managementAPIKey-region
 		//
-		// We're not doing strict verification here -- just basic sanity checks for user convenience.
 		// Actual access verification happens on the backend using the API keys.
 
-		var keys []string
-
-		if matches := simpleTokenRe.FindStringSubmatch(authToken); matches != nil {
-			keys = matches[1:4]
-		} else if a.oauthEnabled() {
-			if a.jwks == nil {
-				return nil, fmt.Errorf("JWKS not configured: set JWKS_URL for public mode JWT verification")
-			}
-
-			token, err := jwt.Parse([]byte(authToken), jwt.WithKeySet(a.jwks), jwt.WithValidate(true), jwt.WithIssuer(a.cfg.OAuthAuthorizationServer))
-			if err != nil {
-				a.opts.logger().Error("JWT validation failed", "err", err)
-				return nil, auth.ErrInvalidToken
-			}
-
-			parts := strings.SplitN(token.Subject(), "-", 3)
-			if len(parts) != 3 {
-				a.opts.logger().Error("JWT subject must consist of three parts")
-				return nil, auth.ErrInvalidToken
-			}
-
-			keys = parts
-			expiration = token.Expiration()
-		}
-
-		allEmpty := true
-		for _, value := range keys {
-			if len(value) > 0 {
-				allEmpty = false
-				break
-			}
-		}
-		if allEmpty {
-			a.opts.logger().Error("received a token with all parts empty")
+		token, err := a.verifyJWT(authToken)
+		if err != nil {
+			a.opts.logger().Error("JWT validation failed", "err", err)
 			return nil, auth.ErrInvalidToken
 		}
 
+		keys, err := parseKeysDashSeparated(token.Subject())
+		if err != nil {
+			a.opts.logger().Error("JWT subject is invalid", "err", err)
+			return nil, auth.ErrInvalidToken
+		}
+
+		extra := map[string]any{
+			tokenExtraServerApiKey: keys[0],
+			tokenExtraMgmtApiKey:   keys[1],
+			tokenExtraRegionKey:    keys[2],
+		}
+		if subID, ok := token.Get(claimSubscriptionID); ok {
+			extra[tokenExtraSubscriptionID] = subID
+		}
+
 		return &auth.TokenInfo{
-			Expiration: expiration,
-			Extra: map[string]any{
-				tokenExtraServerApiKey: keys[0],
-				tokenExtraMgmtApiKey:   keys[1],
-				tokenExtraRegionKey:    keys[2],
-			},
+			Expiration: token.Expiration(),
+			Extra:      extra,
 		}, nil
 	}
 
@@ -345,11 +376,13 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
+		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
 
 		a.opts.logger().Debug("MCP method started",
 			"method", method,
 			"tool_name", toolName,
 			"has_params", req.GetParams() != nil,
+			"sub_id", subID,
 		)
 
 		start := time.Now()
@@ -362,6 +395,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				"tool_name", toolName,
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
+				"sub_id", subID,
 			)
 		} else {
 			isError := false
@@ -378,6 +412,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				"has_result", result != nil,
 				"is_error", isError,
 				"err", ctrError,
+				"sub_id", subID,
 			)
 		}
 		return result, err
