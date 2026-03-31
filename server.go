@@ -390,7 +390,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
-		if ir, ok := req.(*mcp.InitializeRequest); ok {
+		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			clientInfo = ir.Params.ClientInfo.Name + "/" + ir.Params.ClientInfo.Version
 		}
 		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
