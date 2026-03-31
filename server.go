@@ -386,8 +386,12 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		req mcp.Request,
 	) (mcp.Result, error) {
 		var toolName string
+		var clientInfo string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
+		}
+		if ir, ok := req.(*mcp.InitializeRequest); ok {
+			clientInfo = ir.Params.ClientInfo.Name + "/" + ir.Params.ClientInfo.Version
 		}
 		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
 
@@ -396,6 +400,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			"tool_name", toolName,
 			"has_params", req.GetParams() != nil,
 			"sub_id", subID,
+			"client_info", clientInfo,
 		)
 
 		start := time.Now()
@@ -409,6 +414,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
 				"sub_id", subID,
+				"client_info", clientInfo,
 			)
 		} else {
 			isError := false
@@ -426,6 +432,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				"is_error", isError,
 				"err", ctrError,
 				"sub_id", subID,
+				"client_info", clientInfo,
 			)
 		}
 		return result, err
