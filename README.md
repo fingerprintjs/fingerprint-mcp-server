@@ -1,3 +1,13 @@
+<p align="center">
+    <a href="https://fingerprint.com">
+        <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="https://fingerprintjs.github.io/home/resources/logo_light.svg" />
+            <source media="(prefers-color-scheme: light)" srcset="https://fingerprintjs.github.io/home/resources/logo_dark.svg" />
+            <img src="https://fingerprintjs.github.io/home/resources/logo_dark.svg" alt="Fingerprint logo" width="312px" />
+        </picture>
+    </a>
+</p>
+
 # Fingerprint MCP Server
 
 ## Features
