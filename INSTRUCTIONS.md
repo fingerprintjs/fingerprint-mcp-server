@@ -1,21 +1,19 @@
-Fingerprint MCP Server exposes tools, resources, and prompts for working with the Fingerprint device intelligence platform (https://fingerprint.com).
+Tools, resources, and prompts for the Fingerprint device intelligence platform (https://fingerprint.com).
 
-## What you can do with this server
+## Capabilities
 
-- **Retrieve identification events** with full smart signal data using the `get_event` and `search_events` tools. Events contain a `visitorId` (stable device identifier), smart signals (bot detection, VPN, incognito, etc.), and request metadata.
-- **Manage workspace resources** via the management tools: list, create, update, and delete environments and API keys (`list_environments`, `list_api_keys`, `get_api_key`, `create_environment`, `update_environment`, `delete_environment`, `create_api_key`, `update_api_key`, `delete_api_key`). Not all deployments expose the write tools — check the tool list.
-- **Onboard Fingerprint into a project** using the `Fingerprint Onboarding Guide` prompt, which walks through installing the JS Agent and verifying that events reach Fingerprint.
-- **Inspect schemas** through the exposed resources (event schema, environment schema, API key schema) before calling tools or interpreting results.
+- **Events**: `get_event`, `search_events` return `visitorId`, smart signals (bot, VPN, incognito, …), and request metadata.
+- **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
+- **Onboarding**: the `Fingerprint Onboarding Guide` prompt walks through JS Agent install and event verification.
+- **Schemas**: event, environment, and API key schemas are exposed as resources.
 
-## Guidance for using the tools
+## Guidance
 
-- Prefer `search_events` over `get_event` when you do not already have a specific `requestId` — it supports filtering by visitor, time range, and smart signals.
-- The event schema resource is authoritative. When a user asks about a field, read the schema rather than guessing.
-- API keys come in four types: **public** keys are used by the JS Agent in the browser; **secret** (server) keys are used for server-to-server calls; **management** keys used to manager workspace resources; **proxy** keys used for proxy integrations.
-- Destructive management operations (`delete_environment`, `delete_api_key`) are irreversible. Confirm with the user before calling them.
+- Prefer `search_events` over `get_event` unless you have a specific `requestId`.
+- Treat the event schema resource as authoritative for field questions.
+- API key types: **public** (JS Agent), **secret** (server-to-server), **management** (workspace admin), **proxy** (proxy integrations).
+- `delete_environment` / `delete_api_key` are irreversible — confirm first.
 
-## Documentation
+## Docs
 
-Recently there was a major version release v3->v4. Therefore some documentation pages exist in v3 and v4 versions. Always prefer v4 documentation unless you are sure you're working with a legacy v3 setup.
-
-Fingerprint has an extensive documentation. Start here when looking for something: https://docs.fingerprint.com/llms.txt
+Prefer v4 over v3 docs unless on a legacy setup. Start at https://docs.fingerprint.com/llms.txt.

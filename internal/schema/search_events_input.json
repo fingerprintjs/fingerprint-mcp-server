@@ -36,11 +36,11 @@
       "type": "boolean"
     },
     "end": {
-      "description": "Filter events with a timestamp smaller than the end time, in Unix time (milliseconds).\n",
+      "description": "Include events that happened before this point (with timestamp less than or equal the provided `end` Unix milliseconds value). Defaults to now. Setting `end` does not change `start`'s default of `7 days ago` — adjust it separately if needed.\n",
       "type": "integer"
     },
     "environment": {
-      "description": "Filter for events by providing one or more environment IDs (`environment_id` property).\n",
+      "description": "Filter for events by providing one or more environment IDs (`environment_id` property).\n\n### Array syntax\nTo provide multiple environment IDs, use the repeated keys syntax (`environment=env1\u0026environment=env2`).\nOther notations like comma-separated (`environment=env1,env2`) or bracket notation (`environment[]=env1\u0026environment[]=env2`) are not supported.\n",
       "items": {
         "type": "string"
       },
@@ -54,9 +54,21 @@
       "description": "Filter events by Frida Detection result.\n\u003e Note: When using this parameter, only events with the `frida` property set to `true` or `false` are returned. Events without a `frida` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
+    "high_recall_id": {
+      "description": "The High Recall ID is a supplementary browser identifier designed for use cases that require wider coverage over precision. Compared to the standard visitor ID, the High Recall ID strives to match incoming browsers more generously (rather than precisely) with existing browsers and thus identifies fewer browsers as new. The High Recall ID is best suited for use cases that are sensitive to browsers being identified as new and where mismatched browsers are not detrimental.\n\nFilter events by matching High Recall ID (`supplementary_id_high_recall.visitor_id` property).\n",
+      "type": "string"
+    },
     "incognito": {
       "description": "Filter events by Browser Incognito Detection result.\n\u003e Note: When using this parameter, only events with the `incognito` property set to `true` or `false` are returned. Events without an `incognito` Smart Signal result are left out of the response.\n",
       "type": "boolean"
+    },
+    "incremental_identification_status": {
+      "description": "Filter events by their incremental identification status (`incremental_identification_status` property). Non incremental identification events are left out of the response.\n",
+      "enum": [
+        "partially_completed",
+        "completed"
+      ],
+      "type": "string"
     },
     "ip_address": {
       "description": "Filter events by IP address or IP range (if CIDR notation is used). If CIDR notation is not used, a /32 for IPv4 or /128 for IPv6 is assumed.\nExamples of range based queries: 10.0.0.0/24, 192.168.0.1/32\n",
@@ -68,7 +80,7 @@
     },
     "limit": {
       "default": 10,
-      "description": "Limit the number of events returned.\n",
+      "description": "Maximum number of events to return. Results are selected from the time range (`start`, `end`), ordered by `reverse`, then truncated to provided `limit` size. So `reverse=true` returns the oldest N=`limit` events, otherwise the newest N=`limit` events.\n",
       "maximum": 100,
       "minimum": 1,
       "type": "integer"
@@ -113,8 +125,24 @@
       "description": "Filter events by Proxy detection result.\n\u003e Note: When using this parameter, only events with the `proxy` property set to `true` or `false` are returned. Events without a `proxy` Smart Signal result are left out of the response.\n",
       "type": "boolean"
     },
+    "rare_device": {
+      "description": "Filter events by Device Rarity detection result.\n\u003e Note: When using this parameter, only events with the `rare_device` property set to `true` or `false` are returned. Events without a Device Rarity Smart Signal result are left out of the response.\n",
+      "type": "boolean"
+    },
+    "rare_device_percentile_bucket": {
+      "description": "Filter events by Device Rarity percentile bucket.\n`\u003cp95` - device configuration is in the bottom 95% (most common).\n`p95-p99` - device is in the 95th to 99th percentile.\n`p99-p99.5` - device is in the 99th to 99.5th percentile.\n`p99.5-p99.9` - device is in the 99.5th to 99.9th percentile.\n`p99.9+` - device is in the top 0.1% (rarest).\n`not_seen` - device configuration has never been observed before.\n",
+      "enum": [
+        "\u003cp95",
+        "p95-p99",
+        "p99-p99.5",
+        "p99.5-p99.9",
+        "p99.9+",
+        "not_seen"
+      ],
+      "type": "string"
+    },
     "reverse": {
-      "description": "Sort events in reverse timestamp order.\n",
+      "description": "When `true`, sort events oldest first (ascending timestamp order). Default is newest first (descending timestamp order).\n",
       "type": "boolean"
     },
     "root_apps": {
@@ -134,8 +162,12 @@
       "description": "Filter events by a specific SDK version associated with the identification event (`sdk.version` property). Example: `3.11.14`\n",
       "type": "string"
     },
+    "simulator": {
+      "description": "Filter events by iOS Simulator Detection result.\n\n\u003e Note: When using this parameter, only events with the `simulator` property set to `true` or `false` are returned. Events without a `simulator` Smart Signal result are left out of the response.\n",
+      "type": "boolean"
+    },
     "start": {
-      "description": "Filter events with a timestamp greater than the start time, in Unix time (milliseconds).\n",
+      "description": "Include events that happened after this point (with timestamp greater than or equal the provided `start` Unix milliseconds value). Defaults to 7 days ago. Setting `start` does not change `end`'s default of `now` — adjust it separately if needed.\n",
       "type": "integer"
     },
     "suspect": {
@@ -165,7 +197,7 @@
       "type": "boolean"
     },
     "visitor_id": {
-      "description": "Unique [visitor identifier](https://docs.fingerprint.com/reference/js-agent-v4-get-function#visitor_id) issued by Fingerprint Identification and all active Smart Signals.\nFilter for events matching this `visitor_id`.\n",
+      "description": "Unique [visitor identifier](https://docs.fingerprint.com/reference/js-agent-v4-get-function#visitor_id) issued by Fingerprint Identification and all active Smart Signals.\n\nFilter events by matching Visitor ID (`identification.visitor_id` property).\n",
       "type": "string"
     },
     "vpn": {

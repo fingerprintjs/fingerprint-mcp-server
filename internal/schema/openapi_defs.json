@@ -4,7 +4,7 @@
     "type": "integer"
   },
   "Audio": {
-    "description": "AudioContext fingerprint or negative status when unavailable. The negative statuses can be: - -1: A permanent status for those browsers which are known to always suspend audio context - -2: A permanent status for browsers that don't support the signal - -3: A temporary status that means that an unexpected timeout has happened\n",
+    "description": "AudioContext fingerprint or negative status when unavailable. The negative statuses can be:\n- -1: A permanent status for those browsers which are known to always suspend audio context\n- -2: A permanent status for browsers that don't support the signal\n- -3: A temporary status that means that an unexpected timeout has happened\n",
     "type": "number"
   },
   "BotInfo": {
@@ -128,7 +128,7 @@
     "type": "string"
   },
   "ClonedApp": {
-    "description": "Android specific cloned application detection. There are 2 values:  * `true` - Presence of app cloners work detected (e.g. fully cloned application found or launch of it inside of a not main working profile detected). * `false` - No signs of cloned application detected or the client is not Android.\n",
+    "description": "Android specific cloned application detection. There are 2 values: \n* `true` - Presence of app cloners work detected (e.g. fully cloned application found or launch of it inside of a not main working profile detected).\n* `false` - No signs of cloned application detected or the client is not Android.\n",
     "type": "boolean"
   },
   "ColorDepth": {
@@ -140,17 +140,25 @@
     "type": "boolean"
   },
   "DateTimeLocale": {
-    "description": "Locale derived from the Intl.DateTimeFormat API. Negative values indicate known error states. The negative statuses can be: - \"-1\": A permanent status for browsers that don't support Intl API. - \"-2\": A permanent status for browsers that don't supportDateTimeFormat constructor. - \"-3\": A permanent status for browsers in which DateTimeFormat locale is undefined or null.\n",
+    "description": "Locale derived from the Intl.DateTimeFormat API. Negative values indicate known error states. The negative statuses can be:\n- \"-1\": A permanent status for browsers that don't support Intl API.\n- \"-2\": A permanent status for browsers that don't supportDateTimeFormat constructor.\n- \"-3\": A permanent status for browsers in which DateTimeFormat locale is undefined or null.\n",
     "type": "string"
   },
   "DeveloperTools": {
     "description": "`true` if the browser is Chrome with DevTools open or Firefox with Developer Tools open, `false` otherwise.\n",
     "type": "boolean"
   },
+  "DeviceManufacturer": {
+    "description": "Device manufacturer string. Available only for Android and iOS devices.",
+    "type": "string"
+  },
   "DeviceMemory": {
     "description": "Rounded amount of RAM (in gigabytes) reported by the browser.",
     "minimum": 0,
     "type": "integer"
+  },
+  "DeviceModel": {
+    "description": "Device model string. Available only for Android and iOS devices.",
+    "type": "string"
   },
   "Emoji": {
     "additionalProperties": true,
@@ -247,6 +255,9 @@
       "incognito": {
         "$ref": "#/$defs/Incognito"
       },
+      "incremental_identification_status": {
+        "$ref": "#/$defs/IncrementalIdentificationStatus"
+      },
       "ip_address": {
         "$ref": "#/$defs/IpAddress"
       },
@@ -286,6 +297,15 @@
       "proxy_details": {
         "$ref": "#/$defs/ProxyDetails"
       },
+      "proxy_ml_score": {
+        "$ref": "#/$defs/ProxyMLScore"
+      },
+      "rare_device": {
+        "$ref": "#/$defs/RareDevice"
+      },
+      "rare_device_percentile_bucket": {
+        "$ref": "#/$defs/RareDevicePercentileBucket"
+      },
       "raw_device_attributes": {
         "$ref": "#/$defs/RawDeviceAttributes"
       },
@@ -300,6 +320,9 @@
       },
       "sdk": {
         "$ref": "#/$defs/SDK"
+      },
+      "simulator": {
+        "$ref": "#/$defs/Simulator"
       },
       "supplementary_id_high_recall": {
         "$ref": "#/$defs/SupplementaryIDHighRecall"
@@ -316,8 +339,14 @@
       "tampering": {
         "$ref": "#/$defs/Tampering"
       },
+      "tampering_confidence": {
+        "$ref": "#/$defs/TamperingConfidence"
+      },
       "tampering_details": {
         "$ref": "#/$defs/TamperingDetails"
+      },
+      "tampering_ml_score": {
+        "$ref": "#/$defs/TamperingMlScore"
       },
       "timestamp": {
         "$ref": "#/$defs/Timestamp"
@@ -333,6 +362,9 @@
       },
       "virtual_machine": {
         "$ref": "#/$defs/VirtualMachine"
+      },
+      "virtual_machine_ml_score": {
+        "$ref": "#/$defs/VirtualMachineMLScore"
       },
       "vpn": {
         "$ref": "#/$defs/Vpn"
@@ -477,6 +509,10 @@
     "description": "The time of the most recent factory reset that happened on the **mobile device** is expressed as Unix epoch time. When a factory reset cannot be detected on the mobile device or when the request is initiated from a browser,  this field will correspond to the *epoch* time (i.e 1 Jan 1970 UTC) as a value of 0. See [Factory Reset Detection](https://docs.fingerprint.com/docs/smart-signals-reference#factory-reset-detection) to learn more about this Smart Signal.\n",
     "type": "integer"
   },
+  "FontHash": {
+    "description": "Unique identifier for the user’s installed fonts.",
+    "type": "string"
+  },
   "FontPreferences": {
     "additionalProperties": true,
     "description": "Baseline measurement of canonical fonts rendered on the device. Numeric width metrics, in CSS pixels, for the canonical fonts collected by the agent.\n",
@@ -582,7 +618,6 @@
   },
   "HardwareConcurrency": {
     "description": "Number of logical CPU cores reported by the browser.",
-    "minimum": 1,
     "type": "integer"
   },
   "HighActivity": {
@@ -743,6 +778,14 @@
     "description": "`true` if we detected incognito mode used in the browser, `false` otherwise.\n",
     "type": "boolean"
   },
+  "IncrementalIdentificationStatus": {
+    "description": "Only included for requests using incremental identification.\n- `partially_completed` - the event did not receive the second \"update\" request.\n- `completed` - the event was updated and all information is available.\n",
+    "enum": [
+      "partially_completed",
+      "completed"
+    ],
+    "type": "string"
+  },
   "IndexedDb": {
     "description": "Whether IndexedDB is available.",
     "type": "boolean"
@@ -783,7 +826,7 @@
     "type": "boolean"
   },
   "Languages": {
-    "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs.\n",
+    "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs. Available for both browsers and iOS devices\n",
     "items": {
       "items": {
         "type": "string"
@@ -939,6 +982,28 @@
     ],
     "type": "object"
   },
+  "ProxyMLScore": {
+    "description": "Machine learning–based proxy score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `proxy` detection result\n",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+  },
+  "RareDevice": {
+    "description": "`true` if the device is considered rare based on its combination of hardware and software attributes.  A device is classified as rare if it falls within the top 99.9 percentile (lowest-frequency segment) of observed traffic,  or if its configuration has not been previously seen (`not_seen`).\n\u003e This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "type": "boolean"
+  },
+  "RareDevicePercentileBucket": {
+    "description": "The rarity percentile bucket of the device, indicating how uncommon the device configuration is compared to all observed devices. \n\u003e This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "enum": [
+      "\u003cp95",
+      "p95-p99",
+      "p99-p99.5",
+      "p99.5-p99.9",
+      "p99.9+",
+      "not_seen"
+    ],
+    "type": "string"
+  },
   "RawDeviceAttributes": {
     "additionalProperties": true,
     "description": "A curated subset of raw browser/device attributes that the API surface exposes. Each property contains a value or object with the data for the collected signal.\n",
@@ -961,11 +1026,20 @@
       "date_time_locale": {
         "$ref": "#/$defs/DateTimeLocale"
       },
+      "device_manufacturer": {
+        "$ref": "#/$defs/DeviceManufacturer"
+      },
       "device_memory": {
         "$ref": "#/$defs/DeviceMemory"
       },
+      "device_model": {
+        "$ref": "#/$defs/DeviceModel"
+      },
       "emoji": {
         "$ref": "#/$defs/Emoji"
+      },
+      "font_hash": {
+        "$ref": "#/$defs/FontHash"
       },
       "font_preferences": {
         "$ref": "#/$defs/FontPreferences"
@@ -1005,6 +1079,9 @@
       },
       "timezone": {
         "$ref": "#/$defs/Timezone"
+      },
+      "timezone_offset": {
+        "$ref": "#/$defs/TimezoneOffset"
       },
       "touch_support": {
         "$ref": "#/$defs/TouchSupport"
@@ -1131,7 +1208,7 @@
     "type": "object"
   },
   "ScreenResolution": {
-    "description": "Current screen resolution.",
+    "description": "Current screen resolution. Available for both browsers and iOS devices",
     "items": {
       "type": "integer"
     },
@@ -1143,31 +1220,35 @@
     "description": "Whether sessionStorage is available.",
     "type": "boolean"
   },
+  "Simulator": {
+    "description": "iOS specific simulator detection. There are 2 values:\n* `true` - Simulator environment detected.\n* `false` - No signs of simulator or the client is not iOS.\n",
+    "type": "boolean"
+  },
   "StatusCode": {
     "description": "A valid HTTP status code.",
     "type": "integer"
   },
   "SupplementaryIDHighRecall": {
     "additionalProperties": true,
-    "description": "A supplementary browser identifier that prioritizes coverage over precision. The High Recall ID algorithm matches more generously, i.e., this identifier will remain the same even when there are subtle differences between two requests. This algorithm does not create as many new visitor IDs as the standard algorithms do, but there could be an increase in false-positive identification.",
+    "description": "The High Recall ID is a supplementary browser identifier designed for use cases that require wider coverage over precision. Compared to the standard visitor ID, the High Recall ID strives to match incoming browsers more generously (rather than precisely) with existing browsers and thus identifies fewer browsers as new. The High Recall ID is best suited for use cases that are sensitive to browsers being identified as new and where mismatched browsers are not detrimental.",
     "properties": {
       "confidence": {
         "$ref": "#/$defs/IdentificationConfidence"
       },
       "first_seen_at": {
-        "description": "Unix epoch time milliseconds timestamp indicating the time at which this ID was first seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "description": "Unix epoch timestamp (in milliseconds) indicating when the browser was first identified. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
         "type": "integer"
       },
       "last_seen_at": {
-        "description": "Unix epoch time milliseconds timestamp indicating the time at which this ID was last seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "description": "Unix epoch timestamp (in milliseconds) corresponding to the most recent visit by this browser. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
         "type": "integer"
       },
       "visitor_found": {
-        "description": "Attribute represents if a visitor had been identified before.",
+        "description": "True if this is a returning browser and has been previously identified. Otherwise, false.",
         "type": "boolean"
       },
       "visitor_id": {
-        "description": "String of 20 characters that uniquely identifies the visitor's browser or mobile device.",
+        "description": "The High Recall identifier for the visitor's browser. It is an alphanumeric string with a maximum length of 25 characters.",
         "type": "string"
       }
     },
@@ -1191,24 +1272,39 @@
     "type": "object"
   },
   "Tampering": {
-    "description": "Flag indicating browser tampering was detected. This happens when either:\n  * There are inconsistencies in the browser configuration that cross internal tampering thresholds (see `tampering_details.anomaly_score`).\n  * The browser signature resembles an \"anti-detect\" browser specifically designed to evade fingerprinting (see `tampering_details.anti_detect_browser`).\n",
+    "description": "The field can be used as a standalone flag for tampering detection. Alternatively, the more granular fields documented below can be used for workflows that require more context.\n* `true` if tampering is detected through an anomalous browser signature, anti-detect browser detection, or other tampering-related methods\n* `false` if none of the tampering checks return a positive result\n",
     "type": "boolean"
+  },
+  "TamperingConfidence": {
+    "description": "The confidence level indicates how certain Fingerprint is that the current request involves browser tampering. This confidence level is determined by evaluating multiple factors, such as heuristic rules, probabilistic anomaly detection, an anti detect browser ml model, and other relevant methods. It is conveyed as a string with possible values such as high, medium, or low\nIn case of tampering: `true`\n* **High confidence**: heuristic anti detect browser signals and the ml model are triggered, or all of the methods are triggered.\n* **Medium confidence**: either the ml model triggers alone, the anomaly score triggers alone with or without the heuristic anti detect browser methods trigger.\n* **Low confidence**: only the heuristic anti detect methods are triggered.\n\nIn case of tampering: `false`\n* **High confidence:** Strong signals suggest the user is not tampering with their request.\n",
+    "enum": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "type": "string"
   },
   "TamperingDetails": {
     "additionalProperties": true,
     "properties": {
       "anomaly_score": {
-        "description": "Confidence score (`0.0 - 1.0`) for tampering detection:\n  * Values above `0.5` indicate tampering.\n  * Values below `0.5` indicate genuine browsers.\n",
+        "description": "The output of this model is captured as anomaly_score, a statistical score indicating how rare the visitor's browser signature is compared to the overall population. Values close to 1 signify highly anomalous browsers and we consider anything above the threshold of 0.5 to be actionable (the result field conveniently captures that fact).\n",
         "maximum": 1,
         "minimum": 0,
         "type": "number"
       },
       "anti_detect_browser": {
-        "description": "True if the identified browser resembles an \"anti-detect\" browser, such as Incognition, which attempts to evade identification by manipulating its fingerprint.\n",
+        "description": "Detects whether the request shows evidence of anti-detect browser usage.\nThis field may be triggered by:\n* heuristic detection of known anti-detect browser behavior\n* machine learning detection of anti-detect browser patterns\n\nExamples of anti-detect browsers include tools such as AdsPower, DolphinAnty, OctoBrowser, and GoLogin.\n",
         "type": "boolean"
       }
     },
     "type": "object"
+  },
+  "TamperingMlScore": {
+    "description": "The output of this model is captured as tampering_ml_score, a number indicating how likely an event is coming from an anti detect browser. Values close to 1 signify higher confidence and we consider anything above the threshold of 0.8 to be actionable (the result and anti_detect_browser fields conveniently captures that fact)\n",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
   },
   "Timestamp": {
     "description": "Timestamp of the event with millisecond precision in Unix time.",
@@ -1216,6 +1312,10 @@
   },
   "Timezone": {
     "description": "Timezone identifier detected on the client.",
+    "type": "string"
+  },
+  "TimezoneOffset": {
+    "description": "UTC offset in \"±HH:MM\" format derived from the detected IANA timezone.",
     "type": "string"
   },
   "TouchSupport": {
@@ -1300,6 +1400,12 @@
   "VirtualMachine": {
     "description": "`true` if the request came from a browser running inside a virtual machine (e.g. VMWare), `false` otherwise.\n",
     "type": "boolean"
+  },
+  "VirtualMachineMLScore": {
+    "description": "Machine learning–based virtual machine score,  represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `virtual_machine` detection result\n",
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
   },
   "Vpn": {
     "description": "VPN or other anonymizing service has been used when sending the request.\n",
