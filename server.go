@@ -2,6 +2,7 @@ package fpmcpserver
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
+
+//go:embed INSTRUCTIONS.md
+var instructions string
 
 type App struct {
 	server       *mcp.Server
@@ -116,6 +120,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 			},
 			&mcp.ServerOptions{
 				//Logger: opts.logger(),
+				Instructions: instructions,
 			},
 		),
 		cfg:     cfg,
