@@ -16,4 +16,6 @@ Fingerprint MCP Server exposes tools, resources, and prompts for working with th
 
 ## Documentation
 
+Recently there was a major version release v3->v4. Therefore some documentation pages exist in v3 and v4 versions. Always prefer v4 documentation unless you are sure you're working with a legacy v3 setup.
+
 Fingerprint has an extensive documentation. Start here when looking for something: https://docs.fingerprint.com/llms.txt
