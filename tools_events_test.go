@@ -35,11 +35,11 @@ func TestSearchEventInputToRequest_StartEndRFC3339(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			startTime, err := time.Parse(time.RFC3339, tc.start)
+			startTime, err := time.Parse(time.RFC3339Nano, tc.start)
 			if err != nil {
 				t.Fatalf("setup: parse start: %v", err)
 			}
-			endTime, err := time.Parse(time.RFC3339, tc.end)
+			endTime, err := time.Parse(time.RFC3339Nano, tc.end)
 			if err != nil {
 				t.Fatalf("setup: parse end: %v", err)
 			}

@@ -252,14 +252,14 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 	if input.Start != nil {
 		t, err := time.Parse(time.RFC3339Nano, *input.Start)
 		if err != nil {
-			return req, fmt.Errorf(`invalid "start": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" (got %q)`, *input.Start)
+			return req, fmt.Errorf(`invalid "start": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS±hh:mm" (got %q)`, *input.Start)
 		}
 		req = req.Start(t.UnixMilli())
 	}
 	if input.End != nil {
 		t, err := time.Parse(time.RFC3339Nano, *input.End)
 		if err != nil {
-			return req, fmt.Errorf(`invalid "end": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" (got %q)`, *input.End)
+			return req, fmt.Errorf(`invalid "end": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS±hh:mm" (got %q)`, *input.End)
 		}
 		req = req.End(t.UnixMilli())
 	}
