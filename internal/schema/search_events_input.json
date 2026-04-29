@@ -36,8 +36,9 @@
       "type": "boolean"
     },
     "end": {
-      "description": "Include events that happened before this point (with timestamp less than or equal the provided `end` Unix milliseconds value). Defaults to now. Setting `end` does not change `start`'s default of `7 days ago` — adjust it separately if needed.\n",
-      "type": "integer"
+      "description": "Upper bound of the time window (inclusive) as an RFC3339 timestamp. UTC (\"YYYY-MM-DDTHH:MM:SSZ\") or with timezone offset (\"YYYY-MM-DDTHH:MM:SS±hh:mm\"); fractional seconds are accepted. Defaults to now. Setting \"end\" does not change \"start\"'s default of \"7 days ago\"; adjust it separately if needed.\n\nAlways derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are typically retained for ~90 days (varies by plan).",
+      "format": "date-time",
+      "type": "string"
     },
     "environment": {
       "description": "Filter for events by providing one or more environment IDs (`environment_id` property).\n\n### Array syntax\nTo provide multiple environment IDs, use the repeated keys syntax (`environment=env1\u0026environment=env2`).\nOther notations like comma-separated (`environment=env1,env2`) or bracket notation (`environment[]=env1\u0026environment[]=env2`) are not supported.\n",
@@ -167,8 +168,9 @@
       "type": "boolean"
     },
     "start": {
-      "description": "Include events that happened after this point (with timestamp greater than or equal the provided `start` Unix milliseconds value). Defaults to 7 days ago. Setting `start` does not change `end`'s default of `now` — adjust it separately if needed.\n",
-      "type": "integer"
+      "description": "Lower bound of the time window (inclusive) as an RFC3339 timestamp. UTC (\"YYYY-MM-DDTHH:MM:SSZ\") or with timezone offset (\"YYYY-MM-DDTHH:MM:SS±hh:mm\"); fractional seconds are accepted. Defaults to 7 days ago. Setting \"start\" does not change \"end\"'s default of \"now\"; adjust it separately if needed.\n\nAlways derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data; if you are unsure of the current date, check first. Events are typically retained for ~90 days (varies by plan).",
+      "format": "date-time",
+      "type": "string"
     },
     "suspect": {
       "description": "Filter events previously tagged as suspicious via the [Update API](https://docs.fingerprint.com/reference/server-api-v4-update-event).\n\u003e Note: When using this parameter, only events with the `suspect` property explicitly set to `true` or `false` are returned. Events with undefined `suspect` property are left out of the response.\n",

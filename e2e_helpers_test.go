@@ -15,10 +15,11 @@ import (
 
 // requestRecord stores a captured request for assertions.
 type requestRecord struct {
-	Method string
-	Path   string
-	Header http.Header
-	Body   string
+	Method   string
+	Path     string
+	RawQuery string
+	Header   http.Header
+	Body     string
 }
 
 // mockFingerprintAPI simulates the Fingerprint Server API.
@@ -81,10 +82,11 @@ func (m *mockFingerprintAPI) recordRequest(r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests = append(m.requests, requestRecord{
-		Method: r.Method,
-		Path:   r.URL.Path,
-		Header: r.Header.Clone(),
-		Body:   string(body),
+		Method:   r.Method,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+		Header:   r.Header.Clone(),
+		Body:     string(body),
 	})
 }
 
@@ -177,10 +179,11 @@ func (m *mockManagementAPI) recordRequest(r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests = append(m.requests, requestRecord{
-		Method: r.Method,
-		Path:   r.URL.Path,
-		Header: r.Header.Clone(),
-		Body:   string(body),
+		Method:   r.Method,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+		Header:   r.Header.Clone(),
+		Body:     string(body),
 	})
 }
 
