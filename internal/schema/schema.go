@@ -212,23 +212,8 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 	}
 }
 
-// retentionWindow mirrors the Server API's ~90 day event retention. Rejecting
-// out-of-window timestamps here turns AI hallucinations of stale years into a
-// clear error instead of an expensive clamp or a zero-row response. Can be
-// removed once the Server API rejects natively.
-const retentionWindow = 90 * 24 * time.Hour
-
-func checkInRetentionWindow(field, value string, t time.Time) error {
-	if time.Since(t) > retentionWindow {
-		earliest := time.Now().UTC().Add(-retentionWindow).Format(time.RFC3339)
-		return fmt.Errorf(`%q is more than 90 days in the past (got %q): events older than 90 days are not retained, use a value no earlier than %q`, field, value, earliest)
-	}
-	return nil
-}
-
 // SearchEventInputToRequest converts a SearchEventInput into a fingerprint.SearchEventRequest.
-// Returns an error if start/end are not valid RFC3339 or fall outside the ~90
-// day retention window.
+// Returns an error if start/end are not valid RFC3339.
 func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEventRequest, error) {
 	req := fingerprint.NewSearchEventsRequest()
 	if input.Limit != nil {
@@ -269,18 +254,12 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 		if err != nil {
 			return req, fmt.Errorf(`invalid "start": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" (got %q)`, *input.Start)
 		}
-		if err := checkInRetentionWindow("start", *input.Start, t); err != nil {
-			return req, err
-		}
 		req = req.Start(t.UnixMilli())
 	}
 	if input.End != nil {
 		t, err := time.Parse(time.RFC3339Nano, *input.End)
 		if err != nil {
 			return req, fmt.Errorf(`invalid "end": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" (got %q)`, *input.End)
-		}
-		if err := checkInRetentionWindow("end", *input.End, t); err != nil {
-			return req, err
 		}
 		req = req.End(t.UnixMilli())
 	}

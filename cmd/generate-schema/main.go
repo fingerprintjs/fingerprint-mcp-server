@@ -278,11 +278,11 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 
 const rfc3339StartDescription = `Lower bound of the time window (inclusive) as an RFC3339 timestamp (format "YYYY-MM-DDTHH:MM:SSZ"). Defaults to 7 days ago. Setting "start" does not change "end"'s default of "now"; adjust it separately if needed.
 
-Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data; if you are unsure of the current date, check first. Events are retained for ~90 days, so a "start" older than 90 days is rejected with a clear error.`
+Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data; if you are unsure of the current date, check first. Events are typically retained for ~90 days (varies by plan).`
 
 const rfc3339EndDescription = `Upper bound of the time window (inclusive) as an RFC3339 timestamp (format "YYYY-MM-DDTHH:MM:SSZ"). Defaults to now. Setting "end" does not change "start"'s default of "7 days ago"; adjust it separately if needed.
 
-Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are retained for ~90 days, so an "end" older than 90 days is rejected with a clear error.`
+Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are typically retained for ~90 days (varies by plan).`
 
 // collectRefs recursively collects all schemas referenced from the given root schema name.
 func collectRefs(allSchemas map[string]any, name string, collected map[string]any) {

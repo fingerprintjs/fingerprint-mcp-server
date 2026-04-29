@@ -95,36 +95,6 @@ func TestSearchEventInputToRequest_InvalidEndReturnsError(t *testing.T) {
 	}
 }
 
-func TestSearchEventInputToRequest_StartTooOld(t *testing.T) {
-	bad := "2020-01-01T00:00:00Z"
-	input := schema.SearchEventInput{Start: &bad}
-	_, err := schema.SearchEventInputToRequest(&input)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	msg := err.Error()
-	for _, want := range []string{"start", "90 days", bad} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("error %q missing %q", msg, want)
-		}
-	}
-}
-
-func TestSearchEventInputToRequest_EndTooOld(t *testing.T) {
-	bad := "2020-01-01T00:00:00Z"
-	input := schema.SearchEventInput{End: &bad}
-	_, err := schema.SearchEventInputToRequest(&input)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	msg := err.Error()
-	for _, want := range []string{"end", "90 days", bad} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("error %q missing %q", msg, want)
-		}
-	}
-}
-
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.
