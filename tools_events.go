@@ -146,7 +146,10 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		}
 
 		// Call Fingerprint API
-		searchReq := schema.SearchEventInputToRequest(&input)
+		searchReq, err := schema.SearchEventInputToRequest(&input)
+		if err != nil {
+			return nil, nil, err
+		}
 		events, _, err := fpClient.SearchEvents(ctx, searchReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to search events: %w", err)

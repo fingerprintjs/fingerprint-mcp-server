@@ -2,11 +2,128 @@ package fpmcpserver
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/go-sdk/v8"
 )
+
+// TestSearchEventInputToRequest_StartEndRFC3339 verifies that RFC3339 strings on
+// the MCP surface are parsed into the equivalent UnixMilli values that the
+// underlying SDK still expects. Covers both the "Z" form and an offset form so
+// AI tools producing either don't end up sending wrong-time-zone queries.
+//
+// Fixtures are derived from time.Now() so the test never falls outside the
+// 90 day retention window as the calendar moves forward.
+func TestSearchEventInputToRequest_StartEndRFC3339(t *testing.T) {
+	now := time.Now()
+	weekAgo := now.Add(-7 * 24 * time.Hour)
+	pacific := time.FixedZone("PDT", -7*3600)
+	eastern := time.FixedZone("EDT", -4*3600)
+
+	cases := []struct {
+		name  string
+		start string
+		end   string
+	}{
+		{"utc Z form", weekAgo.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339)},
+		{"offset form", weekAgo.In(pacific).Format(time.RFC3339), now.In(eastern).Format(time.RFC3339)},
+		// JS toISOString() emits fractional seconds; reject would break common clients.
+		{"fractional seconds", weekAgo.UTC().Format("2006-01-02T15:04:05.000Z"), now.UTC().Format("2006-01-02T15:04:05.000Z")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			startTime, err := time.Parse(time.RFC3339, tc.start)
+			if err != nil {
+				t.Fatalf("setup: parse start: %v", err)
+			}
+			endTime, err := time.Parse(time.RFC3339, tc.end)
+			if err != nil {
+				t.Fatalf("setup: parse end: %v", err)
+			}
+			expected := fingerprint.NewSearchEventsRequest().
+				Start(startTime.UnixMilli()).
+				End(endTime.UnixMilli())
+
+			input := schema.SearchEventInput{Start: &tc.start, End: &tc.end}
+			got, err := schema.SearchEventInputToRequest(&input)
+			if err != nil {
+				t.Fatalf("SearchEventInputToRequest: %v", err)
+			}
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("request mismatch\n got: %#v\nwant: %#v", got, expected)
+			}
+		})
+	}
+}
+
+// TestSearchEventInputToRequest_InvalidStartReturnsError checks the error is
+// AI-actionable: it names the field, includes the offending value, and points
+// at the RFC3339 format so the AI can immediately reconstruct the call.
+func TestSearchEventInputToRequest_InvalidStartReturnsError(t *testing.T) {
+	bad := "yesterday"
+	input := schema.SearchEventInput{Start: &bad}
+	_, err := schema.SearchEventInputToRequest(&input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"start", "yesterday", "RFC3339"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q missing %q", msg, want)
+		}
+	}
+}
+
+// TestSearchEventInputToRequest_InvalidEndReturnsError covers the most likely
+// AI mistake post-change: passing a Unix-ms string. Error must call out the
+// field name, the offending value, and the format.
+func TestSearchEventInputToRequest_InvalidEndReturnsError(t *testing.T) {
+	bad := "1714000000000"
+	input := schema.SearchEventInput{End: &bad}
+	_, err := schema.SearchEventInputToRequest(&input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"end", bad, "RFC3339"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q missing %q", msg, want)
+		}
+	}
+}
+
+func TestSearchEventInputToRequest_StartTooOld(t *testing.T) {
+	bad := "2020-01-01T00:00:00Z"
+	input := schema.SearchEventInput{Start: &bad}
+	_, err := schema.SearchEventInputToRequest(&input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"start", "90 days", bad} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q missing %q", msg, want)
+		}
+	}
+}
+
+func TestSearchEventInputToRequest_EndTooOld(t *testing.T) {
+	bad := "2020-01-01T00:00:00Z"
+	input := schema.SearchEventInput{End: &bad}
+	_, err := schema.SearchEventInputToRequest(&input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	for _, want := range []string{"end", "90 days", bad} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q missing %q", msg, want)
+		}
+	}
+}
 
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
@@ -18,8 +135,12 @@ func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 		setNonZero(t, inputVal.Type().Field(i).Name, field)
 	}
 
-	// Should not panic
-	req := schema.SearchEventInputToRequest(&input)
+	// Should not panic and should not error on the (RFC3339) start/end strings
+	// produced by setNonZero.
+	req, err := schema.SearchEventInputToRequest(&input)
+	if err != nil {
+		t.Fatalf("SearchEventInputToRequest: %v", err)
+	}
 
 	// Verify req is non-zero (i.e., something was set)
 	if reflect.DeepEqual(req, fingerprint.NewSearchEventsRequest()) {
@@ -36,7 +157,12 @@ func setNonZero(t *testing.T, name string, v reflect.Value) {
 		setNonZero(t, name, ptr.Elem())
 		v.Set(ptr)
 	case reflect.String:
-		v.SetString("test")
+		// Start/End must parse as a recent RFC3339 timestamp.
+		if name == "Start" || name == "End" {
+			v.SetString(time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
+		} else {
+			v.SetString("test")
+		}
 	case reflect.Bool:
 		v.SetBool(true)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
