@@ -248,6 +248,20 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 		}
 	}
 
+	// Override start/end to RFC3339 strings on the MCP surface. The OpenAPI
+	// spec still declares them as int64 (Unix ms); we hide that here and
+	// convert in SearchEventInputToRequest.
+	properties["start"] = map[string]any{
+		"type":        "string",
+		"format":      "date-time",
+		"description": rfc3339StartDescription,
+	}
+	properties["end"] = map[string]any{
+		"type":        "string",
+		"format":      "date-time",
+		"description": rfc3339EndDescription,
+	}
+
 	sort.Strings(required)
 
 	schema := map[string]any{
@@ -261,6 +275,14 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 
 	return schema, nil
 }
+
+const rfc3339StartDescription = `Lower bound of the time window (inclusive) as an RFC3339 timestamp. UTC ("YYYY-MM-DDTHH:MM:SSZ") or with timezone offset ("YYYY-MM-DDTHH:MM:SS±hh:mm"); fractional seconds are accepted. Defaults to 7 days ago. Setting "start" does not change "end"'s default of "now"; adjust it separately if needed.
+
+Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data; if you are unsure of the current date, check first. Events are typically retained for ~90 days (varies by plan).`
+
+const rfc3339EndDescription = `Upper bound of the time window (inclusive) as an RFC3339 timestamp. UTC ("YYYY-MM-DDTHH:MM:SSZ") or with timezone offset ("YYYY-MM-DDTHH:MM:SS±hh:mm"); fractional seconds are accepted. Defaults to now. Setting "end" does not change "start"'s default of "7 days ago"; adjust it separately if needed.
+
+Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are typically retained for ~90 days (varies by plan).`
 
 // collectRefs recursively collects all schemas referenced from the given root schema name.
 func collectRefs(allSchemas map[string]any, name string, collected map[string]any) {
@@ -493,6 +515,10 @@ func generateSearchEventInputStruct(spec map[string]any) (string, error) {
 		isRequired := requiredSet[name]
 
 		goType := openAPITypeToGo(typeName, format, isRequired, schema)
+		// Pair with the schema override above: start/end are RFC3339 strings.
+		if name == "start" || name == "end" {
+			goType = "*string"
+		}
 		goName := snakeToPascal(name)
 
 		jsonTag := name

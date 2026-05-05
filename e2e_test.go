@@ -6,7 +6,9 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -571,6 +573,83 @@ func TestSearchEvents_Success(t *testing.T) {
 
 	if result.IsError {
 		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+}
+
+// Confirms RFC3339 input is converted to the UnixMilli query params the
+// Server API expects.
+func TestSearchEvents_RFC3339Window(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+	})
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	// Time-relative so the test stays inside the 90 day retention window
+	// regardless of when it runs.
+	startTime := time.Now().Add(-7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	endTime := time.Now().UTC().Truncate(time.Second)
+	startStr := startTime.Format(time.RFC3339)
+	endStr := endTime.Format(time.RFC3339)
+
+	result := mustCallTool(t, session, "search_events", map[string]any{
+		"limit": 10,
+		"start": startStr,
+		"end":   endStr,
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	q, err := url.ParseQuery(fpAPI.lastRequest().RawQuery)
+	if err != nil {
+		t.Fatalf("parse upstream query: %v", err)
+	}
+
+	wantStart := strconv.FormatInt(startTime.UnixMilli(), 10)
+	if got := q.Get("start"); got != wantStart {
+		t.Errorf("upstream start param = %q, want %q", got, wantStart)
+	}
+	wantEnd := strconv.FormatInt(endTime.UnixMilli(), 10)
+	if got := q.Get("end"); got != wantEnd {
+		t.Errorf("upstream end param = %q, want %q", got, wantEnd)
+	}
+}
+
+// TestSearchEvents_InvalidStart locks the AI-actionable error contract
+// end-to-end: a non-RFC3339 start surfaces an MCP error result whose text
+// names the field and tells the AI what format to use.
+func TestSearchEvents_InvalidStart(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+	})
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	result := mustCallTool(t, session, "search_events", map[string]any{
+		"limit": 10,
+		"start": "yesterday",
+	})
+
+	if !result.IsError {
+		t.Fatalf("expected error result, got success")
+	}
+	msg := extractTextContent(t, result)
+	for _, want := range []string{"start", "RFC3339", "yesterday"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error text %q missing %q", msg, want)
+		}
 	}
 }
 

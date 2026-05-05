@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/fingerprintjs/go-sdk/v8"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -211,9 +212,9 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 	}
 }
 
-// SearchEventInputToRequest converts a SearchEventInput into a fingerprint.SearchEventRequest
-// using the builder pattern.
-func SearchEventInputToRequest(input *SearchEventInput) fingerprint.SearchEventRequest {
+// SearchEventInputToRequest converts a SearchEventInput into a fingerprint.SearchEventRequest.
+// Returns an error if start/end are not valid RFC3339.
+func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEventRequest, error) {
 	req := fingerprint.NewSearchEventsRequest()
 	if input.Limit != nil {
 		req = req.Limit(*input.Limit)
@@ -249,10 +250,18 @@ func SearchEventInputToRequest(input *SearchEventInput) fingerprint.SearchEventR
 		req = req.Origin(*input.Origin)
 	}
 	if input.Start != nil {
-		req = req.Start(*input.Start)
+		t, err := time.Parse(time.RFC3339Nano, *input.Start)
+		if err != nil {
+			return req, fmt.Errorf(`invalid "start": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS±hh:mm" (got %q)`, *input.Start)
+		}
+		req = req.Start(t.UnixMilli())
 	}
 	if input.End != nil {
-		req = req.End(*input.End)
+		t, err := time.Parse(time.RFC3339Nano, *input.End)
+		if err != nil {
+			return req, fmt.Errorf(`invalid "end": must be an RFC3339 timestamp like "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS±hh:mm" (got %q)`, *input.End)
+		}
+		req = req.End(t.UnixMilli())
 	}
 	if input.Reverse != nil {
 		req = req.Reverse(*input.Reverse)
@@ -332,7 +341,7 @@ func SearchEventInputToRequest(input *SearchEventInput) fingerprint.SearchEventR
 	if input.TorNode != nil {
 		req = req.TorNode(*input.TorNode)
 	}
-	return req
+	return req, nil
 }
 
 func MustInferSchema[T any]() json.RawMessage {
