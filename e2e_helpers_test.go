@@ -219,6 +219,40 @@ func setupTestServer(t *testing.T, cfg *config.Config) *httptest.Server {
 	return ts
 }
 
+// setupStdioServer creates an App with the given config and runs it over
+// in-memory transports that simulate a stdio connection, returning a connected
+// client session.
+func setupStdioServer(t *testing.T, cfg *config.Config) *mcp.ClientSession {
+	t.Helper()
+
+	app, err := New(cfg, &opts{})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	go func() {
+		_ = app.server.Run(ctx, serverTransport)
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect to stdio server: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	return session
+}
+
 // authRoundTripper injects an Authorization: Bearer header into all requests.
 type authRoundTripper struct {
 	token string
