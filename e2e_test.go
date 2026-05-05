@@ -232,6 +232,23 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 }
 
+func TestListTools_Stdio(t *testing.T) {
+	session := setupStdioServer(t, &config.Config{
+		ServerAPIKey:     "test-server-key",
+		ManagementAPIKey: "test-mgmt-key",
+	})
+
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	names := toolNames(result)
+	if len(names) != 11 {
+		t.Errorf("expected 11 tools, got %d: %v", len(names), names)
+	}
+}
+
 // --- Group 2: Authentication ---
 
 func TestAuth_PrivateMode_ValidToken(t *testing.T) {

@@ -401,7 +401,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				clientInfo = ci.Name + "/" + ci.Version
 			}
 		}
-		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
+		extra := req.GetExtra()
+		var subID string // subID is optional
+		if extra != nil {
+			subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
+		}
 
 		a.opts.logger().Debug("MCP method started",
 			"method", method,
