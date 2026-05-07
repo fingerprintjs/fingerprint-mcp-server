@@ -934,7 +934,7 @@ func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
 
-	handler := &captureHandler{}
+	handler := newCaptureHandler()
 	logger := slog.New(handler)
 
 	cfg := &config.Config{
@@ -975,20 +975,35 @@ func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 
 	records := handler.snapshot()
 
-	var sawResourceCompleted, sawPromptCompleted, sawResourceFailed bool
+	// Assert the new fields populate on the started, completed, and failed
+	// records so a regression that touches only one branch (e.g. someone
+	// adds a new field on completed but forgets started) fails the test.
+	var sawResourceStarted, sawResourceCompleted bool
+	var sawPromptStarted, sawPromptCompleted bool
+	var sawResourceFailed bool
 	for _, r := range records {
 		attrs := recordAttrs(r)
 		switch {
+		case r.Message == "MCP method started" && attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI:
+			sawResourceStarted = true
 		case r.Message == "MCP method completed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI:
 			sawResourceCompleted = true
+		case r.Message == "MCP method started" && attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName:
+			sawPromptStarted = true
 		case r.Message == "MCP method completed" && attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName:
 			sawPromptCompleted = true
 		case r.Message == "MCP method failed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == badURI:
 			sawResourceFailed = true
 		}
 	}
+	if !sawResourceStarted {
+		t.Errorf("expected MCP method started with method=resources/read and resource_uri=%q", resourceURI)
+	}
 	if !sawResourceCompleted {
 		t.Errorf("expected MCP method completed with method=resources/read and resource_uri=%q", resourceURI)
+	}
+	if !sawPromptStarted {
+		t.Errorf("expected MCP method started with method=prompts/get and prompt_name=%q", promptName)
 	}
 	if !sawPromptCompleted {
 		t.Errorf("expected MCP method completed with method=prompts/get and prompt_name=%q", promptName)
