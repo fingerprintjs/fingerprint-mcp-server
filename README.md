@@ -72,9 +72,11 @@ The server can be configured via CLI flags or environment variables:
 
 ## Telemetry
 
-The hosted public-mode server can emit anonymous product-analytics events to
+The hosted public-mode server can emit non-PII product-analytics events to
 Amplitude so the maintainers can answer basic questions like which tools are
-used most and what the integration funnel completion rate is.
+used most and what the integration funnel completion rate is. Events are
+keyed by Fingerprint `subscription_id` (pseudonymous within Amplitude — not
+truly anonymous) and never carry customer data; see the field list below.
 
 **Self-hosted users emit nothing.** Telemetry is gated on `--public` *and* a
 non-empty `MCP_AMPLITUDE_API_KEY`. Private/self-hosted deployments stay

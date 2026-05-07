@@ -95,6 +95,15 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 		return err
 	}
 
+	// Register the emitter drain immediately after New() succeeds so the
+	// background worker is closed on every exit path — including JWKS or
+	// registration errors below — instead of leaking until process exit.
+	defer func() {
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = opts.analyticsEmitter().Close(drainCtx)
+	}()
+
 	opts.logger().Info("starting fingerprint-mcp-server", "version", app.version)
 
 	if config.JwksURL != "" {
@@ -115,13 +124,6 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 		return fmt.Errorf("registering prompts: %w", err)
 	}
 
-	defer func() {
-		// Best-effort drain of buffered analytics events on shutdown.
-		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = opts.analyticsEmitter().Close(drainCtx)
-	}()
-
 	return app.run(ctx)
 }
 
@@ -136,27 +138,6 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	appName := opts.appName
 	if appName == "" {
 		appName = "fingerprint-mcp-server"
-	}
-
-	// Build the default analytics emitter when one wasn't injected. Telemetry
-	// is gated on public mode + a configured API key — private/self-hosted
-	// deployments emit nothing regardless of API key presence.
-	if opts.emitter == nil {
-		if cfg.PublicMode && cfg.AmplitudeAPIKey != "" {
-			em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
-				APIKey:           cfg.AmplitudeAPIKey,
-				Endpoint:         cfg.AmplitudeEndpoint,
-				IdentifyEndpoint: cfg.AmplitudeIdentifyEndpoint,
-				FlushInterval:    cfg.AmplitudeFlushInterval,
-				Logger:           opts.logger(),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("initialising analytics: %w", err)
-			}
-			opts.emitter = em
-		} else {
-			opts.emitter = analytics.Noop()
-		}
 	}
 
 	a := &App{
@@ -180,6 +161,28 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if cfg.JwtPublicKey != "" {
 		if err := a.initJwtPublicKey(); err != nil {
 			return nil, err
+		}
+	}
+
+	// Build the default analytics emitter only after every other step that
+	// could fail so we never leak a worker goroutine on an error return.
+	// Telemetry is gated on public mode + a configured API key —
+	// private/self-hosted deployments emit nothing regardless.
+	if opts.emitter == nil {
+		if cfg.PublicMode && cfg.AmplitudeAPIKey != "" {
+			em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
+				APIKey:           cfg.AmplitudeAPIKey,
+				Endpoint:         cfg.AmplitudeEndpoint,
+				IdentifyEndpoint: cfg.AmplitudeIdentifyEndpoint,
+				FlushInterval:    cfg.AmplitudeFlushInterval,
+				Logger:           opts.logger(),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("initializing analytics: %w", err)
+			}
+			opts.emitter = em
+		} else {
+			opts.emitter = analytics.Noop()
 		}
 	}
 
