@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/analytics"
@@ -171,11 +172,10 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if opts.emitter == nil {
 		if cfg.PublicMode && cfg.AmplitudeAPIKey != "" {
 			em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
-				APIKey:           cfg.AmplitudeAPIKey,
-				Endpoint:         cfg.AmplitudeEndpoint,
-				IdentifyEndpoint: cfg.AmplitudeIdentifyEndpoint,
-				FlushInterval:    cfg.AmplitudeFlushInterval,
-				Logger:           opts.logger(),
+				APIKey:        cfg.AmplitudeAPIKey,
+				Endpoint:      cfg.AmplitudeEndpoint,
+				FlushInterval: cfg.AmplitudeFlushInterval,
+				Logger:        opts.logger(),
 			})
 			if err != nil {
 				return nil, fmt.Errorf("initializing analytics: %w", err)
@@ -446,6 +446,27 @@ func analyticsResourceURI(uri string) string {
 	return uri
 }
 
+// amplitudePropMaxLen caps the byte length of every client-controlled string
+// property we emit. Amplitude's per-property limit is ~1024 chars; capping
+// well below that means realistic values pass through untouched while a
+// hostile or buggy MCP client can't push multi-KB strings into our
+// analytics. Values ≤ this many bytes are unchanged.
+const amplitudePropMaxLen = 512
+
+// capForAmplitude truncates s to amplitudePropMaxLen bytes, walking back to
+// the nearest UTF-8 rune boundary so we never produce invalid UTF-8 (which
+// Amplitude would reject). Most legitimate values are well under the cap.
+func capForAmplitude(s string) string {
+	if len(s) <= amplitudePropMaxLen {
+		return s
+	}
+	truncated := s[:amplitudePropMaxLen]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
+}
+
 func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(
 		ctx context.Context,
@@ -476,17 +497,6 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 		}
 		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
-
-		// On initialize, attach client_name/client_version as sticky Amplitude
-		// user properties on the subscription. Subsequent events from the same
-		// sub_id inherit them at query time, sidestepping the
-		// stateless-server / no-session-storage problem.
-		if a.cfg.PublicMode && clientName != "" && subID != "" {
-			a.opts.analyticsEmitter().Identify(subID, map[string]any{
-				"client_name":    clientName,
-				"client_version": clientVersion,
-			})
-		}
 
 		// baseAttrs returns the common attributes for every log line. Optional
 		// fields are only included when populated to avoid empty-string noise on
@@ -545,6 +555,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// Emit one analytics event per MCP method. Gated on public mode +
 		// non-empty subscription_id; private/self-hosted deployments and
 		// pre-auth methods carry no user identifier and stay silent.
+		//
+		// All client-controlled string property values are capped via
+		// capForAmplitude to stay well under Amplitude's ~1024-char
+		// per-property limit. method/server_version/transport/error_class
+		// are server-controlled and bounded by construction.
 		if a.cfg.PublicMode && subID != "" {
 			props := map[string]any{
 				"method":         method,
@@ -554,25 +569,39 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				"transport":      a.cfg.Transport,
 			}
 			if toolName != "" {
-				props["tool_name"] = toolName
+				props["tool_name"] = capForAmplitude(toolName)
 			}
 			if resourceURI != "" {
 				// Strip per-call identifiers from templated resource URIs
 				// before sending to Amplitude (long retention) so we never
 				// store specific event_ids etc. Static URIs pass through
 				// unchanged.
-				props["resource_uri"] = analyticsResourceURI(resourceURI)
+				props["resource_uri"] = capForAmplitude(analyticsResourceURI(resourceURI))
 			}
 			if promptName != "" {
-				props["prompt_name"] = promptName
+				props["prompt_name"] = capForAmplitude(promptName)
 			}
 			if errorClass != "" {
 				props["error_class"] = errorClass
 			}
+			// Attach client_name/client_version as sticky Amplitude user
+			// properties on the initialize event only (clientName is empty
+			// for every other method). Amplitude treats event-level
+			// user_properties as updates that persist on the user, so all
+			// subsequent events from this sub_id inherit them at query
+			// time without needing a separate /identify call.
+			var userProps map[string]any
+			if clientName != "" {
+				userProps = map[string]any{
+					"client_name":    capForAmplitude(clientName),
+					"client_version": capForAmplitude(clientVersion),
+				}
+			}
 			a.opts.analyticsEmitter().Emit(analytics.Event{
-				Type:       "mcp_method_called",
-				UserID:     subID,
-				Properties: props,
+				Type:           "mcp_method_called",
+				UserID:         subID,
+				Properties:     props,
+				UserProperties: userProps,
 			})
 		}
 

@@ -27,10 +27,9 @@ type Config struct {
 	OAuthResource            string        `arg:"env:OAUTH_RESOURCE" help:"URL of this server"`
 	OAuthAuthorizationServer string        `arg:"env:OAUTH_AUTH_SERVER" help:"URL of the OAuth authorization server"`
 	JwksURL                  string        `arg:"env:JWKS_URL" help:"JWKS URL for JWT token verification in public mode"`
-	AmplitudeAPIKey          string        `arg:"env:MCP_AMPLITUDE_API_KEY" help:"Amplitude project API key. When set together with --public, the server emits product-analytics events. Empty disables telemetry."`
-	AmplitudeEndpoint        string        `arg:"env:MCP_AMPLITUDE_ENDPOINT" help:"Amplitude HTTP V2 events endpoint. Override for EU residency (https://api.eu.amplitude.com/2/httpapi)." default:"https://api2.amplitude.com/2/httpapi"`
-	AmplitudeIdentifyEndpoint string       `arg:"env:MCP_AMPLITUDE_IDENTIFY_ENDPOINT" help:"Amplitude identify endpoint. Override for EU residency (https://api.eu.amplitude.com/identify)." default:"https://api2.amplitude.com/identify"`
-	AmplitudeFlushInterval   time.Duration `arg:"env:MCP_AMPLITUDE_FLUSH_INTERVAL" help:"Maximum time the analytics worker waits before flushing a partial batch." default:"5s"`
+	AmplitudeAPIKey        string        `arg:"env:MCP_AMPLITUDE_API_KEY" help:"Amplitude project API key. When set together with --public, the server emits product-analytics events. Empty disables telemetry."`
+	AmplitudeEndpoint      string        `arg:"env:MCP_AMPLITUDE_ENDPOINT" help:"Amplitude HTTP V2 events endpoint. Override for EU residency (https://api.eu.amplitude.com/2/httpapi)." default:"https://api2.amplitude.com/2/httpapi"`
+	AmplitudeFlushInterval time.Duration `arg:"env:MCP_AMPLITUDE_FLUSH_INTERVAL" help:"Maximum time the analytics worker waits before flushing a partial batch." default:"5s"`
 }
 
 func MustParse() *Config {

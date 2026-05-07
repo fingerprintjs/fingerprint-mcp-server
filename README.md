@@ -67,7 +67,6 @@ The server can be configured via CLI flags or environment variables:
 | `--jwks-url`           | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
 | `--amplitude-api-key`  | `MCP_AMPLITUDE_API_KEY`          |                                  | Amplitude project API key. Empty disables analytics (see Telemetry).     |
 | `--amplitude-endpoint` | `MCP_AMPLITUDE_ENDPOINT`         | `https://api2.amplitude.com/2/httpapi` | Amplitude HTTP V2 events URL. Override for EU residency.           |
-| `--amplitude-identify-endpoint` | `MCP_AMPLITUDE_IDENTIFY_ENDPOINT` | `https://api2.amplitude.com/identify` | Amplitude identify URL. Override for EU residency.           |
 | `--amplitude-flush-interval` | `MCP_AMPLITUDE_FLUSH_INTERVAL` | `5s`                             | Maximum delay before the analytics worker flushes a partial batch.       |
 
 ## Telemetry
@@ -93,9 +92,12 @@ When telemetry is enabled, every MCP method emits a single
 - `is_error`, `error_class`
 - `server_version`, `transport`
 
-On `initialize`, the AI client name and version are also attached as sticky
+On `initialize`, the AI client name and version are attached as sticky
 Amplitude **user properties** (`client_name`, `client_version`) on the
-subscription, so subsequent events inherit them at query time.
+`initialize` event itself — Amplitude HTTP V2 supports per-event
+`user_properties` and persists them on the user, so subsequent events from
+the same `subscription_id` inherit them at query time without a separate
+identify call.
 
 The server **never** sends:
 

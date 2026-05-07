@@ -1048,11 +1048,10 @@ func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, s
 func newTestAmplitudeEmitter(t *testing.T, mock *mockAmplitude) analytics.Emitter {
 	t.Helper()
 	em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
-		APIKey:           "test-amplitude-key",
-		Endpoint:         mock.eventsURL(),
-		IdentifyEndpoint: mock.identifyURL(),
-		FlushInterval:    20 * time.Millisecond,
-		HTTPTimeout:      time.Second,
+		APIKey:        "test-amplitude-key",
+		Endpoint:      mock.eventsURL(),
+		FlushInterval: 20 * time.Millisecond,
+		HTTPTimeout:   time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewAmplitude: %v", err)
@@ -1103,59 +1102,50 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 		t.Fatal("expected at least one POST to mockAmplitude, got 0")
 	}
 
-	var sawIdentify, sawMethodEvent bool
+	var sawInitializeWithUserProps, sawMethodEvent bool
 	for _, p := range posts {
-		switch p.Path {
-		case "/identify":
-			var body struct {
-				APIKey         string `json:"api_key"`
-				Identification []struct {
-					UserID         string         `json:"user_id"`
-					UserProperties map[string]any `json:"user_properties"`
-				} `json:"identification"`
-			}
-			if err := json.Unmarshal([]byte(p.Body), &body); err != nil {
-				t.Errorf("unmarshal identify body: %v", err)
+		if p.Path != "/2/httpapi" {
+			t.Errorf("unexpected path %q (no /identify expected since user_properties go on events)", p.Path)
+			continue
+		}
+		var body struct {
+			APIKey string `json:"api_key"`
+			Events []struct {
+				EventType       string         `json:"event_type"`
+				UserID          string         `json:"user_id"`
+				EventProperties map[string]any `json:"event_properties"`
+				UserProperties  map[string]any `json:"user_properties"`
+			} `json:"events"`
+		}
+		if err := json.Unmarshal([]byte(p.Body), &body); err != nil {
+			t.Errorf("unmarshal events body: %v", err)
+			continue
+		}
+		if body.APIKey != "test-amplitude-key" {
+			t.Errorf("api_key=%q, want test-amplitude-key", body.APIKey)
+		}
+		for _, e := range body.Events {
+			if e.EventType != "mcp_method_called" || e.UserID != subID {
 				continue
 			}
-			if body.APIKey != "test-amplitude-key" {
-				t.Errorf("identify api_key=%q, want test-amplitude-key", body.APIKey)
+			sawMethodEvent = true
+			if e.EventProperties["transport"] != "streamable-http" {
+				t.Errorf("event transport=%v, want streamable-http", e.EventProperties["transport"])
 			}
-			if len(body.Identification) != 1 || body.Identification[0].UserID != subID {
-				continue
-			}
-			if body.Identification[0].UserProperties["client_name"] != "test-client" {
-				t.Errorf("identify client_name=%v, want test-client", body.Identification[0].UserProperties["client_name"])
-			}
-			sawIdentify = true
-
-		case "/2/httpapi":
-			var body struct {
-				Events []struct {
-					EventType       string         `json:"event_type"`
-					UserID          string         `json:"user_id"`
-					EventProperties map[string]any `json:"event_properties"`
-				} `json:"events"`
-			}
-			if err := json.Unmarshal([]byte(p.Body), &body); err != nil {
-				t.Errorf("unmarshal events body: %v", err)
-				continue
-			}
-			for _, e := range body.Events {
-				if e.EventType == "mcp_method_called" && e.UserID == subID {
-					sawMethodEvent = true
-					if e.EventProperties["transport"] != "streamable-http" {
-						t.Errorf("event transport=%v, want streamable-http", e.EventProperties["transport"])
-					}
+			// initialize is the only method that carries user_properties.
+			if e.EventProperties["method"] == "initialize" {
+				if e.UserProperties["client_name"] != "test-client" {
+					t.Errorf("initialize user_properties.client_name=%v, want test-client", e.UserProperties["client_name"])
 				}
+				sawInitializeWithUserProps = true
 			}
 		}
 	}
-	if !sawIdentify {
-		t.Errorf("expected an /identify POST for user_id=%q", subID)
-	}
 	if !sawMethodEvent {
 		t.Errorf("expected an mcp_method_called event for user_id=%q", subID)
+	}
+	if !sawInitializeWithUserProps {
+		t.Errorf("expected an mcp_method_called event with method=initialize and user_properties.client_name set")
 	}
 }
 

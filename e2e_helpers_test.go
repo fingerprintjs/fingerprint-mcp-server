@@ -323,7 +323,7 @@ func recordAttrs(r slog.Record) map[string]any {
 	return attrs
 }
 
-// mockAmplitude simulates the Amplitude HTTP V2 endpoints (events + identify).
+// mockAmplitude simulates the Amplitude HTTP V2 events endpoint.
 // Mirrors the shape of mockFingerprintAPI so analytics tests follow the same
 // recording-and-assertion pattern as the rest of the suite.
 type mockAmplitude struct {
@@ -335,7 +335,7 @@ type mockAmplitude struct {
 func newMockAmplitude() *mockAmplitude {
 	m := &mockAmplitude{}
 	mux := http.NewServeMux()
-	record := func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/2/httpapi", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		m.mu.Lock()
 		m.requests = append(m.requests, requestRecord{
@@ -346,16 +346,13 @@ func newMockAmplitude() *mockAmplitude {
 		})
 		m.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
-	}
-	mux.HandleFunc("/2/httpapi", record)
-	mux.HandleFunc("/identify", record)
+	})
 	m.server = httptest.NewServer(mux)
 	return m
 }
 
-func (m *mockAmplitude) close()              { m.server.Close() }
-func (m *mockAmplitude) eventsURL() string   { return m.server.URL + "/2/httpapi" }
-func (m *mockAmplitude) identifyURL() string { return m.server.URL + "/identify" }
+func (m *mockAmplitude) close()            { m.server.Close() }
+func (m *mockAmplitude) eventsURL() string { return m.server.URL + "/2/httpapi" }
 
 func (m *mockAmplitude) snapshot() []requestRecord {
 	m.mu.Lock()

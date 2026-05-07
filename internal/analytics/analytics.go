@@ -17,6 +17,12 @@ type Event struct {
 	UserID string
 	// Properties are arbitrary, JSON-serialisable event properties.
 	Properties map[string]any
+	// UserProperties, when non-nil, are attached to the event as Amplitude
+	// user_properties — sticky on the user_id and inherited at query time
+	// by all subsequent events. Typically set only on the first event of a
+	// session (e.g. on `initialize` when client_name / client_version are
+	// available) and left nil thereafter.
+	UserProperties map[string]any
 }
 
 // Emitter is the minimal interface used by the rest of the server. It is
@@ -26,14 +32,9 @@ type Emitter interface {
 	// Emit enqueues an event for asynchronous delivery. It must not block.
 	Emit(Event)
 
-	// Identify attaches sticky user properties to userID. Subsequent events
-	// from the same userID inherit these properties at query time. It must
-	// not block.
-	Identify(userID string, properties map[string]any)
-
 	// Close drains any in-flight events and stops background workers. It is
-	// safe to call multiple times. Subsequent Emit/Identify calls after Close
-	// are no-ops.
+	// safe to call multiple times. Subsequent Emit calls after Close are
+	// no-ops.
 	Close(ctx context.Context) error
 }
 
@@ -44,6 +45,5 @@ func Noop() Emitter { return noopEmitter{} }
 
 type noopEmitter struct{}
 
-func (noopEmitter) Emit(Event)                       {}
-func (noopEmitter) Identify(string, map[string]any)  {}
-func (noopEmitter) Close(context.Context) error      { return nil }
+func (noopEmitter) Emit(Event)                  {}
+func (noopEmitter) Close(context.Context) error { return nil }

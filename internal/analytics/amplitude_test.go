@@ -60,10 +60,9 @@ func newFakeAmplitude() *fakeAmplitude {
 	return f
 }
 
-func (f *fakeAmplitude) close()                    { f.server.Close() }
-func (f *fakeAmplitude) eventsURL() string         { return f.server.URL + "/2/httpapi" }
-func (f *fakeAmplitude) identifyURL() string       { return f.server.URL + "/identify" }
-func (f *fakeAmplitude) setStatus(code int)        { f.status.Store(int32(code)) }
+func (f *fakeAmplitude) close()             { f.server.Close() }
+func (f *fakeAmplitude) eventsURL() string  { return f.server.URL + "/2/httpapi" }
+func (f *fakeAmplitude) setStatus(code int) { f.status.Store(int32(code)) }
 func (f *fakeAmplitude) snapshot() []recorded {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -77,11 +76,10 @@ func (f *fakeAmplitude) snapshot() []recorded {
 func newTestClient(t *testing.T, f *fakeAmplitude) *amplitudeClient {
 	t.Helper()
 	em, err := NewAmplitude(AmplitudeConfig{
-		APIKey:           "test-key",
-		Endpoint:         f.eventsURL(),
-		IdentifyEndpoint: f.identifyURL(),
-		FlushInterval:    20 * time.Millisecond,
-		HTTPTimeout:      time.Second,
+		APIKey:        "test-key",
+		Endpoint:      f.eventsURL(),
+		FlushInterval: 20 * time.Millisecond,
+		HTTPTimeout:   time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewAmplitude: %v", err)
@@ -191,7 +189,6 @@ func TestAmplitude_EmitAfterCloseIsNoop(t *testing.T) {
 
 	// Should not panic.
 	c.Emit(Event{Type: "after_close", UserID: "u1"})
-	c.Identify("u1", map[string]any{"k": "v"})
 	if err := c.Close(context.Background()); err != nil {
 		t.Errorf("second Close: %v", err)
 	}
@@ -221,12 +218,26 @@ func TestAmplitude_Non2xxResponseDoesNotRetry(t *testing.T) {
 	}
 }
 
-func TestAmplitude_IdentifyHitsIdentifyEndpoint(t *testing.T) {
+// TestAmplitude_UserPropertiesOnEvent covers Q3 (client type) — when
+// UserProperties is set on an Event, those should be serialised at the
+// top level of the wire-format event so Amplitude treats them as sticky on
+// the user.
+func TestAmplitude_UserPropertiesOnEvent(t *testing.T) {
 	f := newFakeAmplitude()
 	defer f.close()
 	c := newTestClient(t, f)
 
-	c.Identify("sub_xyz", map[string]any{"client_name": "Claude", "client_version": "0.7.1"})
+	c.Emit(Event{
+		Type:   "mcp_method_called",
+		UserID: "sub_xyz",
+		Properties: map[string]any{
+			"method": "initialize",
+		},
+		UserProperties: map[string]any{
+			"client_name":    "Claude",
+			"client_version": "0.7.1",
+		},
+	})
 	if err := c.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -235,22 +246,23 @@ func TestAmplitude_IdentifyHitsIdentifyEndpoint(t *testing.T) {
 	if len(posts) != 1 {
 		t.Fatalf("expected 1 POST, got %d", len(posts))
 	}
-	if posts[0].URL != "/identify" {
-		t.Errorf("identify went to %q, want /identify", posts[0].URL)
+	if posts[0].URL != "/2/httpapi" {
+		t.Errorf("event went to %q, want /2/httpapi", posts[0].URL)
 	}
-	var pl identifyPayload
+
+	var pl payload
 	if err := json.Unmarshal(posts[0].Body, &pl); err != nil {
-		t.Fatalf("unmarshal identify: %v", err)
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if pl.APIKey != "test-key" {
-		t.Errorf("api_key=%q, want test-key", pl.APIKey)
+	if len(pl.Events) != 1 {
+		t.Fatalf("got %d events in payload, want 1", len(pl.Events))
 	}
-	if len(pl.Identification) != 1 || pl.Identification[0].UserID != "sub_xyz" {
-		t.Fatalf("unexpected identification body: %+v", pl.Identification)
+	got := pl.Events[0]
+	if got.UserProperties["client_name"] != "Claude" || got.UserProperties["client_version"] != "0.7.1" {
+		t.Errorf("user_properties=%+v, want client_name=Claude client_version=0.7.1", got.UserProperties)
 	}
-	props := pl.Identification[0].UserProperties
-	if props["client_name"] != "Claude" || props["client_version"] != "0.7.1" {
-		t.Errorf("unexpected user_properties: %+v", props)
+	if got.EventProperties["method"] != "initialize" {
+		t.Errorf("event_properties.method=%v, want initialize", got.EventProperties["method"])
 	}
 }
 
@@ -291,8 +303,6 @@ func TestAmplitude_IgnoresEmptyTypeOrUserID(t *testing.T) {
 
 	c.Emit(Event{Type: "", UserID: "u1"})
 	c.Emit(Event{Type: "t", UserID: ""})
-	c.Identify("", map[string]any{"k": "v"})
-	c.Identify("u1", nil)
 
 	if err := c.Close(context.Background()); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -305,7 +315,6 @@ func TestAmplitude_IgnoresEmptyTypeOrUserID(t *testing.T) {
 func TestNoop_IsSafe(t *testing.T) {
 	em := Noop()
 	em.Emit(Event{Type: "x", UserID: "u"})
-	em.Identify("u", map[string]any{"k": "v"})
 	if err := em.Close(context.Background()); err != nil {
 		t.Errorf("Noop.Close: %v", err)
 	}

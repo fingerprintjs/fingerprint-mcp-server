@@ -1,6 +1,10 @@
 package fpmcpserver
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestAnalyticsResourceURI(t *testing.T) {
 	cases := []struct {
@@ -46,4 +50,48 @@ func TestAnalyticsResourceURI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCapForAmplitude(t *testing.T) {
+	t.Run("short ASCII passes through unchanged", func(t *testing.T) {
+		in := "get_event"
+		if got := capForAmplitude(in); got != in {
+			t.Errorf("capForAmplitude(%q) = %q, want %q", in, got, in)
+		}
+	})
+
+	t.Run("exactly at limit passes through unchanged", func(t *testing.T) {
+		in := strings.Repeat("a", amplitudePropMaxLen)
+		if got := capForAmplitude(in); got != in {
+			t.Errorf("expected unchanged at exactly the limit; len(in)=%d len(got)=%d", len(in), len(got))
+		}
+	})
+
+	t.Run("ASCII over the limit is truncated to the limit", func(t *testing.T) {
+		in := strings.Repeat("x", amplitudePropMaxLen+100)
+		got := capForAmplitude(in)
+		if len(got) != amplitudePropMaxLen {
+			t.Errorf("len(got)=%d, want %d", len(got), amplitudePropMaxLen)
+		}
+	})
+
+	t.Run("multi-byte UTF-8 is never truncated mid-rune", func(t *testing.T) {
+		// Each emoji is 4 bytes; build a string longer than the limit so
+		// we land right at a multi-byte boundary.
+		emoji := "🙂" // 4 bytes
+		in := strings.Repeat(emoji, (amplitudePropMaxLen/4)+10)
+		got := capForAmplitude(in)
+		if !utf8.ValidString(got) {
+			t.Errorf("truncated string is not valid UTF-8: %q", got)
+		}
+		if len(got) > amplitudePropMaxLen {
+			t.Errorf("len(got)=%d exceeds cap %d", len(got), amplitudePropMaxLen)
+		}
+	})
+
+	t.Run("empty string passes through", func(t *testing.T) {
+		if got := capForAmplitude(""); got != "" {
+			t.Errorf("capForAmplitude(\"\") = %q, want empty", got)
+		}
+	})
 }
