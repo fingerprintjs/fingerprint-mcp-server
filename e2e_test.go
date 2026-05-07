@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // --- Group 1: ListTools ---
@@ -921,5 +923,61 @@ func TestCORS_Options_PrivateMode(t *testing.T) {
 	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
 	if strings.Contains(allowHeaders, "Authorization") {
 		t.Errorf("expected Authorization NOT in allowed headers for private mode, got %q", allowHeaders)
+	}
+}
+
+// TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
+// extracts resource_uri from resources/read requests and prompt_name from
+// prompts/get requests and includes them in the structured log line, mirroring
+// the existing tool_name extraction.
+func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	handler := &captureHandler{}
+	logger := slog.New(handler)
+
+	cfg := &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+	}
+	ts := setupTestServerWithLogger(t, cfg, logger)
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	// Static schema resource — no upstream API call needed.
+	const resourceURI = "fingerprint://schemas/event"
+	if _, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: resourceURI}); err != nil {
+		t.Fatalf("ReadResource(%s) failed: %v", resourceURI, err)
+	}
+
+	// "onboarding" is the SKILL.md prompt embedded under skills/.
+	const promptName = "onboarding"
+	if _, err := session.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: promptName}); err != nil {
+		t.Fatalf("GetPrompt(%s) failed: %v", promptName, err)
+	}
+
+	records := handler.snapshot()
+
+	var sawResourceURI, sawPromptName bool
+	for _, r := range records {
+		attrs := recordAttrs(r)
+		if attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI {
+			sawResourceURI = true
+		}
+		if attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName {
+			sawPromptName = true
+		}
+	}
+	if !sawResourceURI {
+		t.Errorf("expected log record with method=resources/read and resource_uri=%q; got %d records", resourceURI, len(records))
+		for _, r := range records {
+			t.Logf("  record: %s %v", r.Message, recordAttrs(r))
+		}
+	}
+	if !sawPromptName {
+		t.Errorf("expected log record with method=prompts/get and prompt_name=%q", promptName)
 	}
 }

@@ -391,9 +391,17 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		req mcp.Request,
 	) (mcp.Result, error) {
 		var toolName string
+		var resourceURI string
+		var promptName string
 		var clientInfo string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
+		}
+		if rr, ok := req.(*mcp.ReadResourceRequest); ok {
+			resourceURI = rr.Params.URI
+		}
+		if pr, ok := req.(*mcp.GetPromptRequest); ok {
+			promptName = pr.Params.Name
 		}
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			ci := ir.Params.ClientInfo
@@ -406,6 +414,8 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		a.opts.logger().Debug("MCP method started",
 			"method", method,
 			"tool_name", toolName,
+			"resource_uri", resourceURI,
+			"prompt_name", promptName,
 			"has_params", req.GetParams() != nil,
 			"sub_id", subID,
 			"client_info", clientInfo,
@@ -419,6 +429,8 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			a.opts.logger().Error("MCP method failed",
 				"method", method,
 				"tool_name", toolName,
+				"resource_uri", resourceURI,
+				"prompt_name", promptName,
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
 				"sub_id", subID,
@@ -435,6 +447,8 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			a.opts.logger().Debug("MCP method completed",
 				"method", method,
 				"tool_name", toolName,
+				"resource_uri", resourceURI,
+				"prompt_name", promptName,
 				"duration_ms", duration.Milliseconds(),
 				"has_result", result != nil,
 				"is_error", isError,

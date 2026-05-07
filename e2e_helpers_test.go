@@ -3,6 +3,7 @@ package fpmcpserver
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -217,6 +218,70 @@ func setupTestServer(t *testing.T, cfg *config.Config) *httptest.Server {
 	ts := httptest.NewServer(app.handler())
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+// setupTestServerWithLogger is like setupTestServer but also registers
+// resources and prompts and uses the given logger so tests can inspect
+// what loggingMiddleware emits.
+func setupTestServerWithLogger(t *testing.T, cfg *config.Config, logger *slog.Logger) *httptest.Server {
+	t.Helper()
+
+	app, err := New(cfg, &opts{l: logger})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+	if err := app.registerResources(ctx); err != nil {
+		t.Fatalf("failed to register resources: %v", err)
+	}
+	if err := app.registerPrompts(ctx); err != nil {
+		t.Fatalf("failed to register prompts: %v", err)
+	}
+
+	ts := httptest.NewServer(app.handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// captureHandler is a slog.Handler that records every Handle call so tests
+// can assert on log attributes.
+type captureHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *captureHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+
+func (h *captureHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *captureHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *captureHandler) snapshot() []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]slog.Record, len(h.records))
+	copy(out, h.records)
+	return out
+}
+
+// recordAttrs flattens an slog.Record's attributes into a map for assertions.
+func recordAttrs(r slog.Record) map[string]any {
+	attrs := map[string]any{}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+	return attrs
 }
 
 // authRoundTripper injects an Authorization: Bearer header into all requests.
