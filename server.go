@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/analytics"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -36,6 +37,7 @@ type App struct {
 
 type opts struct {
 	l       *slog.Logger
+	emitter analytics.Emitter
 	version string
 	appName string
 }
@@ -47,11 +49,27 @@ func (o opts) logger() *slog.Logger {
 	return slog.Default()
 }
 
+func (o opts) analyticsEmitter() analytics.Emitter {
+	if o.emitter != nil {
+		return o.emitter
+	}
+	return analytics.Noop()
+}
+
 type OptFunc func(o *opts)
 
 func WithLogger(logger *slog.Logger) OptFunc {
 	return func(o *opts) {
 		o.l = logger
+	}
+}
+
+// WithAnalytics injects a custom analytics emitter. When omitted, the server
+// builds a default emitter from cfg.AmplitudeAPIKey (in public mode) or falls
+// back to a no-op. Tests inject a fake here.
+func WithAnalytics(e analytics.Emitter) OptFunc {
+	return func(o *opts) {
+		o.emitter = e
 	}
 }
 
@@ -97,6 +115,13 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 		return fmt.Errorf("registering prompts: %w", err)
 	}
 
+	defer func() {
+		// Best-effort drain of buffered analytics events on shutdown.
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = opts.analyticsEmitter().Close(drainCtx)
+	}()
+
 	return app.run(ctx)
 }
 
@@ -112,6 +137,28 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if appName == "" {
 		appName = "fingerprint-mcp-server"
 	}
+
+	// Build the default analytics emitter when one wasn't injected. Telemetry
+	// is gated on public mode + a configured API key — private/self-hosted
+	// deployments emit nothing regardless of API key presence.
+	if opts.emitter == nil {
+		if cfg.PublicMode && cfg.AmplitudeAPIKey != "" {
+			em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
+				APIKey:           cfg.AmplitudeAPIKey,
+				Endpoint:         cfg.AmplitudeEndpoint,
+				IdentifyEndpoint: cfg.AmplitudeIdentifyEndpoint,
+				FlushInterval:    cfg.AmplitudeFlushInterval,
+				Logger:           opts.logger(),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("initialising analytics: %w", err)
+			}
+			opts.emitter = em
+		} else {
+			opts.emitter = analytics.Noop()
+		}
+	}
+
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -391,6 +438,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		req mcp.Request,
 	) (mcp.Result, error) {
 		var toolName, resourceURI, promptName, clientInfo string
+		var clientName, clientVersion string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
@@ -407,10 +455,23 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			if ci := ir.Params.ClientInfo; ci != nil {
+				clientName = ci.Name
+				clientVersion = ci.Version
 				clientInfo = ci.Name + "/" + ci.Version
 			}
 		}
 		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
+
+		// On initialize, attach client_name/client_version as sticky Amplitude
+		// user properties on the subscription. Subsequent events from the same
+		// sub_id inherit them at query time, sidestepping the
+		// stateless-server / no-session-storage problem.
+		if clientName != "" && subID != "" {
+			a.opts.analyticsEmitter().Identify(subID, map[string]any{
+				"client_name":    clientName,
+				"client_version": clientVersion,
+			})
+		}
 
 		// baseAttrs returns the common attributes for every log line. Optional
 		// fields are only included when populated to avoid empty-string noise on
@@ -441,26 +502,61 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		result, err := next(ctx, method, req)
 		duration := time.Since(start)
 
+		isError := false
+		errorClass := ""
 		if err != nil {
+			errorClass = "internal"
 			a.opts.logger().Error("MCP method failed", append(baseAttrs(),
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
 			)...)
-			return result, err
+		} else {
+			var ctrError error
+			if ctr, ok := result.(*mcp.CallToolResult); ok {
+				isError = ctr.IsError
+				ctrError = ctr.GetError()
+				if isError {
+					errorClass = "tool_error"
+				}
+			}
+			a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
+				"duration_ms", duration.Milliseconds(),
+				"has_result", result != nil,
+				"is_error", isError,
+				"err", ctrError,
+			)...)
 		}
 
-		isError := false
-		var ctrError error
-		if ctr, ok := result.(*mcp.CallToolResult); ok {
-			isError = ctr.IsError
-			ctrError = ctr.GetError()
+		// Emit one analytics event per MCP method. Gated on public mode +
+		// non-empty subscription_id; private/self-hosted deployments and
+		// pre-auth methods carry no user identifier and stay silent.
+		if a.cfg.PublicMode && subID != "" {
+			props := map[string]any{
+				"method":         method,
+				"duration_ms":    duration.Milliseconds(),
+				"is_error":       isError || err != nil,
+				"server_version": a.version,
+				"transport":      a.cfg.Transport,
+			}
+			if toolName != "" {
+				props["tool_name"] = toolName
+			}
+			if resourceURI != "" {
+				props["resource_uri"] = resourceURI
+			}
+			if promptName != "" {
+				props["prompt_name"] = promptName
+			}
+			if errorClass != "" {
+				props["error_class"] = errorClass
+			}
+			a.opts.analyticsEmitter().Emit(analytics.Event{
+				Type:       "mcp_method_called",
+				UserID:     subID,
+				Properties: props,
+			})
 		}
-		a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
-			"duration_ms", duration.Milliseconds(),
-			"has_result", result != nil,
-			"is_error", isError,
-			"err", ctrError,
-		)...)
+
 		return result, err
 	}
 }

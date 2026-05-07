@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/analytics"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -1015,5 +1017,212 @@ func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 		for _, r := range records {
 			t.Logf("  %s %v", r.Message, recordAttrs(r))
 		}
+	}
+}
+
+// signFpjsJWTWithSubID mints a Fingerprint-issued JWT carrying the
+// urn:fingerprint:sub_id claim used to populate user_id on Amplitude events.
+func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, subID string) string {
+	t.Helper()
+	builder := jwt.NewBuilder().
+		Subject(subject).
+		Issuer(fpjsJWTIssuer).
+		Expiration(time.Now().Add(time.Hour))
+	if subID != "" {
+		builder = builder.Claim(claimSubscriptionID, subID)
+	}
+	token, err := builder.Build()
+	if err != nil {
+		t.Fatalf("building JWT: %v", err)
+	}
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, privateKey))
+	if err != nil {
+		t.Fatalf("signing JWT: %v", err)
+	}
+	return string(signed)
+}
+
+// newTestAmplitudeEmitter wires up an analytics.Emitter pointed at the given
+// mockAmplitude. It registers a t.Cleanup that drains the emitter so tests
+// see all in-flight events before asserting.
+func newTestAmplitudeEmitter(t *testing.T, mock *mockAmplitude) analytics.Emitter {
+	t.Helper()
+	em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
+		APIKey:           "test-amplitude-key",
+		Endpoint:         mock.eventsURL(),
+		IdentifyEndpoint: mock.identifyURL(),
+		FlushInterval:    20 * time.Millisecond,
+		HTTPTimeout:      time.Second,
+	})
+	if err != nil {
+		t.Fatalf("NewAmplitude: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = em.Close(ctx)
+	})
+	return em
+}
+
+func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+	mockAmp := newMockAmplitude()
+	defer mockAmp.close()
+
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newTestAmplitudeEmitter(t, mockAmp)
+
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	// Public-mode JWT carries serverKey-mgmtKey-region in the subject and the
+	// subscription_id as a custom claim.
+	const subID = "sub_test_xyz"
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", subID)
+
+	session := mustConnectMCPClient(t, ts.URL, token)
+
+	// initialize is implicit on Connect. Drive a tools/list to land an event.
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	// Drain analytics.
+	if err := emitter.Close(context.Background()); err != nil {
+		t.Fatalf("emitter.Close: %v", err)
+	}
+
+	posts := mockAmp.snapshot()
+	if len(posts) == 0 {
+		t.Fatal("expected at least one POST to mockAmplitude, got 0")
+	}
+
+	var sawIdentify, sawMethodEvent bool
+	for _, p := range posts {
+		switch p.Path {
+		case "/identify":
+			var body struct {
+				APIKey         string `json:"api_key"`
+				Identification []struct {
+					UserID         string         `json:"user_id"`
+					UserProperties map[string]any `json:"user_properties"`
+				} `json:"identification"`
+			}
+			if err := json.Unmarshal([]byte(p.Body), &body); err != nil {
+				t.Errorf("unmarshal identify body: %v", err)
+				continue
+			}
+			if body.APIKey != "test-amplitude-key" {
+				t.Errorf("identify api_key=%q, want test-amplitude-key", body.APIKey)
+			}
+			if len(body.Identification) != 1 || body.Identification[0].UserID != subID {
+				continue
+			}
+			if body.Identification[0].UserProperties["client_name"] != "test-client" {
+				t.Errorf("identify client_name=%v, want test-client", body.Identification[0].UserProperties["client_name"])
+			}
+			sawIdentify = true
+
+		case "/2/httpapi":
+			var body struct {
+				Events []struct {
+					EventType       string         `json:"event_type"`
+					UserID          string         `json:"user_id"`
+					EventProperties map[string]any `json:"event_properties"`
+				} `json:"events"`
+			}
+			if err := json.Unmarshal([]byte(p.Body), &body); err != nil {
+				t.Errorf("unmarshal events body: %v", err)
+				continue
+			}
+			for _, e := range body.Events {
+				if e.EventType == "mcp_method_called" && e.UserID == subID {
+					sawMethodEvent = true
+					if e.EventProperties["transport"] != "streamable-http" {
+						t.Errorf("event transport=%v, want streamable-http", e.EventProperties["transport"])
+					}
+				}
+			}
+		}
+	}
+	if !sawIdentify {
+		t.Errorf("expected an /identify POST for user_id=%q", subID)
+	}
+	if !sawMethodEvent {
+		t.Errorf("expected an mcp_method_called event for user_id=%q", subID)
+	}
+}
+
+func TestAnalytics_PrivateMode_EmitsNothing(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+	mockAmp := newMockAmplitude()
+	defer mockAmp.close()
+
+	emitter := newTestAmplitudeEmitter(t, mockAmp)
+
+	cfg := &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+		Transport:    "streamable-http",
+		// PublicMode left false → middleware must not emit.
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	if err := emitter.Close(context.Background()); err != nil {
+		t.Fatalf("emitter.Close: %v", err)
+	}
+
+	if got := len(mockAmp.snapshot()); got != 0 {
+		t.Errorf("private mode should emit 0 requests, got %d", got)
+		for _, p := range mockAmp.snapshot() {
+			t.Logf("  %s %s body=%s", p.Method, p.Path, p.Body)
+		}
+	}
+}
+
+func TestAnalytics_PublicMode_NoSubID_EmitsNothing(t *testing.T) {
+	mockAmp := newMockAmplitude()
+	defer mockAmp.close()
+
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newTestAmplitudeEmitter(t, mockAmp)
+
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	// Mint a JWT WITHOUT the subscription_id claim. The auth path still
+	// succeeds (subID is optional), but with no user identifier the analytics
+	// gate stays closed and no event leaves the process.
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "")
+
+	session := mustConnectMCPClient(t, ts.URL, token)
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	if err := emitter.Close(context.Background()); err != nil {
+		t.Fatalf("emitter.Close: %v", err)
+	}
+
+	if got := len(mockAmp.snapshot()); got != 0 {
+		t.Errorf("missing sub_id should result in 0 emitted requests, got %d", got)
 	}
 }

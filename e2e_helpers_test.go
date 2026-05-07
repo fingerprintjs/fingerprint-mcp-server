@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/analytics"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -320,6 +321,76 @@ func recordAttrs(r slog.Record) map[string]any {
 		return true
 	})
 	return attrs
+}
+
+// mockAmplitude simulates the Amplitude HTTP V2 endpoints (events + identify).
+// Mirrors the shape of mockFingerprintAPI so analytics tests follow the same
+// recording-and-assertion pattern as the rest of the suite.
+type mockAmplitude struct {
+	server   *httptest.Server
+	mu       sync.Mutex
+	requests []requestRecord
+}
+
+func newMockAmplitude() *mockAmplitude {
+	m := &mockAmplitude{}
+	mux := http.NewServeMux()
+	record := func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		m.mu.Lock()
+		m.requests = append(m.requests, requestRecord{
+			Method: r.Method,
+			Path:   r.URL.Path,
+			Header: r.Header.Clone(),
+			Body:   string(body),
+		})
+		m.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}
+	mux.HandleFunc("/2/httpapi", record)
+	mux.HandleFunc("/identify", record)
+	m.server = httptest.NewServer(mux)
+	return m
+}
+
+func (m *mockAmplitude) close()              { m.server.Close() }
+func (m *mockAmplitude) eventsURL() string   { return m.server.URL + "/2/httpapi" }
+func (m *mockAmplitude) identifyURL() string { return m.server.URL + "/identify" }
+
+func (m *mockAmplitude) snapshot() []requestRecord {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]requestRecord, len(m.requests))
+	copy(out, m.requests)
+	return out
+}
+
+// setupTestServerWithEmitter is like setupTestServer but injects a custom
+// analytics.Emitter via opts and registers tools/resources/prompts so a single
+// test can exercise every method category that the analytics middleware fires
+// for.
+func setupTestServerWithEmitter(t *testing.T, cfg *config.Config, emitter analytics.Emitter) *httptest.Server {
+	t.Helper()
+
+	app, err := New(cfg, &opts{emitter: emitter})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+	if err := app.registerResources(ctx); err != nil {
+		t.Fatalf("failed to register resources: %v", err)
+	}
+	if err := app.registerPrompts(ctx); err != nil {
+		t.Fatalf("failed to register prompts: %v", err)
+	}
+
+	ts := httptest.NewServer(app.handler())
+	t.Cleanup(ts.Close)
+	return ts
 }
 
 // authRoundTripper injects an Authorization: Bearer header into all requests.
