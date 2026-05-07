@@ -478,7 +478,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// user properties on the subscription. Subsequent events from the same
 		// sub_id inherit them at query time, sidestepping the
 		// stateless-server / no-session-storage problem.
-		if clientName != "" && subID != "" {
+		if a.cfg.PublicMode && clientName != "" && subID != "" {
 			a.opts.analyticsEmitter().Identify(subID, map[string]any{
 				"client_name":    clientName,
 				"client_version": clientVersion,

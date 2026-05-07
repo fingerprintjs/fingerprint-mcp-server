@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -297,7 +298,14 @@ func (c *amplitudeClient) post(url string, body []byte, n int) {
 		c.logger.Debug("analytics: POST failed", "err", err, "events", n)
 		return
 	}
-	defer resp.Body.Close()
+	// Drain the body before closing so the underlying connection can be
+	// reused by net/http's transport. Cap the discard to a few KB since
+	// Amplitude responses are tiny and a malicious or misconfigured endpoint
+	// could otherwise stream indefinitely.
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+	}()
 	if resp.StatusCode >= 300 {
 		c.logger.Debug("analytics: non-2xx response, dropping", "status", resp.StatusCode, "events", n)
 	}
