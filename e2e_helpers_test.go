@@ -3,6 +3,7 @@ package fpmcpserver
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -220,6 +221,108 @@ func setupTestServer(t *testing.T, cfg *config.Config) *httptest.Server {
 	ts := httptest.NewServer(app.handler())
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+// setupTestServerWithLogger is like setupTestServer but also registers
+// resources and prompts and uses the given logger so tests can inspect
+// what loggingMiddleware emits.
+func setupTestServerWithLogger(t *testing.T, cfg *config.Config, logger *slog.Logger) *httptest.Server {
+	t.Helper()
+
+	app, err := New(cfg, &opts{l: logger})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+	if err := app.registerResources(ctx); err != nil {
+		t.Fatalf("failed to register resources: %v", err)
+	}
+	if err := app.registerPrompts(ctx); err != nil {
+		t.Fatalf("failed to register prompts: %v", err)
+	}
+
+	ts := httptest.NewServer(app.handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// captureHandler is a slog.Handler that records every Handle call so tests
+// can assert on log attributes. It correctly carries through accumulated
+// attributes from Logger.With(...). WithGroup is intentionally not supported
+// because the production logging in this package never calls it; if that
+// changes in the future, callers will see the panic and update this fixture
+// rather than silently lose attribute keys.
+type captureHandler struct {
+	state *captureState
+	attrs []slog.Attr
+}
+
+type captureState struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func newCaptureHandler() *captureHandler {
+	return &captureHandler{state: &captureState{}}
+}
+
+func (h *captureHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+	// Build a record that includes the accumulated attrs so With(...) chains
+	// don't silently drop attributes during assertion.
+	out := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	for _, a := range h.attrs {
+		out.AddAttrs(a)
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		out.AddAttrs(a)
+		return true
+	})
+
+	h.state.mu.Lock()
+	defer h.state.mu.Unlock()
+	h.state.records = append(h.state.records, out.Clone())
+	return nil
+}
+
+func (h *captureHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
+	merged := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	merged = append(merged, h.attrs...)
+	merged = append(merged, attrs...)
+	return &captureHandler{state: h.state, attrs: merged}
+}
+
+func (h *captureHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	panic("captureHandler does not implement WithGroup; extend the fixture if production logging starts using groups")
+}
+
+func (h *captureHandler) snapshot() []slog.Record {
+	h.state.mu.Lock()
+	defer h.state.mu.Unlock()
+	out := make([]slog.Record, len(h.state.records))
+	copy(out, h.state.records)
+	return out
+}
+
+// recordAttrs flattens an slog.Record's attributes into a map for assertions.
+func recordAttrs(r slog.Record) map[string]any {
+	attrs := map[string]any{}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+	return attrs
 }
 
 // authRoundTripper injects an Authorization: Bearer header into all requests.
