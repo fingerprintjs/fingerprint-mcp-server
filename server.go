@@ -11,8 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/internal/analytics"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -36,6 +38,7 @@ type App struct {
 
 type opts struct {
 	l       *slog.Logger
+	emitter analytics.Emitter
 	version string
 	appName string
 }
@@ -47,11 +50,27 @@ func (o opts) logger() *slog.Logger {
 	return slog.Default()
 }
 
+func (o opts) analyticsEmitter() analytics.Emitter {
+	if o.emitter != nil {
+		return o.emitter
+	}
+	return analytics.Noop()
+}
+
 type OptFunc func(o *opts)
 
 func WithLogger(logger *slog.Logger) OptFunc {
 	return func(o *opts) {
 		o.l = logger
+	}
+}
+
+// WithAnalytics injects a custom analytics emitter. When omitted, the server
+// builds a default emitter from cfg.AmplitudeAPIKey (in public mode) or falls
+// back to a no-op. Tests inject a fake here.
+func WithAnalytics(e analytics.Emitter) OptFunc {
+	return func(o *opts) {
+		o.emitter = e
 	}
 }
 
@@ -76,6 +95,15 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 	if err != nil {
 		return err
 	}
+
+	// Register the emitter drain immediately after New() succeeds so the
+	// background worker is closed on every exit path — including JWKS or
+	// registration errors below — instead of leaking until process exit.
+	defer func() {
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = opts.analyticsEmitter().Close(drainCtx)
+	}()
 
 	opts.logger().Info("starting fingerprint-mcp-server", "version", app.version)
 
@@ -112,6 +140,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if appName == "" {
 		appName = "fingerprint-mcp-server"
 	}
+
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -133,6 +162,27 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if cfg.JwtPublicKey != "" {
 		if err := a.initJwtPublicKey(); err != nil {
 			return nil, err
+		}
+	}
+
+	// Build the default analytics emitter only after every other step that
+	// could fail so we never leak a worker goroutine on an error return.
+	// Telemetry is gated on public mode + a configured API key —
+	// private/self-hosted deployments emit nothing regardless.
+	if opts.emitter == nil {
+		if cfg.PublicMode && cfg.AmplitudeAPIKey != "" {
+			em, err := analytics.NewAmplitude(analytics.AmplitudeConfig{
+				APIKey:        cfg.AmplitudeAPIKey,
+				Endpoint:      cfg.AmplitudeEndpoint,
+				FlushInterval: cfg.AmplitudeFlushInterval,
+				Logger:        opts.logger(),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("initializing analytics: %w", err)
+			}
+			opts.emitter = em
+		} else {
+			opts.emitter = analytics.Noop()
 		}
 	}
 
@@ -384,6 +434,39 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// analyticsResourceURI returns the URI in template form so that per-call
+// identifiers (e.g. event_ids) don't end up in long-retention analytics.
+// Static URIs (no path variables) pass through unchanged. Add cases here
+// when a new templated resource is registered.
+func analyticsResourceURI(uri string) string {
+	const eventsPrefix = "fingerprint://events/"
+	if strings.HasPrefix(uri, eventsPrefix) && len(uri) > len(eventsPrefix) {
+		return eventsPrefix + "{event_id}"
+	}
+	return uri
+}
+
+// amplitudePropMaxLen caps the byte length of every client-controlled string
+// property we emit. Amplitude's per-property limit is ~1024 chars; capping
+// well below that means realistic values pass through untouched while a
+// hostile or buggy MCP client can't push multi-KB strings into our
+// analytics. Values ≤ this many bytes are unchanged.
+const amplitudePropMaxLen = 512
+
+// capForAmplitude truncates s to amplitudePropMaxLen bytes, walking back to
+// the nearest UTF-8 rune boundary so we never produce invalid UTF-8 (which
+// Amplitude would reject). Most legitimate values are well under the cap.
+func capForAmplitude(s string) string {
+	if len(s) <= amplitudePropMaxLen {
+		return s
+	}
+	truncated := s[:amplitudePropMaxLen]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
+}
+
 func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(
 		ctx context.Context,
@@ -391,6 +474,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		req mcp.Request,
 	) (mcp.Result, error) {
 		var toolName, resourceURI, promptName, clientInfo string
+		var clientName, clientVersion string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
@@ -407,6 +491,8 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			if ci := ir.Params.ClientInfo; ci != nil {
+				clientName = ci.Name
+				clientVersion = ci.Version
 				clientInfo = ci.Name + "/" + ci.Version
 			}
 		}
@@ -441,26 +527,84 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		result, err := next(ctx, method, req)
 		duration := time.Since(start)
 
+		isError := false
+		errorClass := ""
 		if err != nil {
+			errorClass = "internal"
 			a.opts.logger().Error("MCP method failed", append(baseAttrs(),
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
 			)...)
-			return result, err
+		} else {
+			var ctrError error
+			if ctr, ok := result.(*mcp.CallToolResult); ok {
+				isError = ctr.IsError
+				ctrError = ctr.GetError()
+				if isError {
+					errorClass = "tool_error"
+				}
+			}
+			a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
+				"duration_ms", duration.Milliseconds(),
+				"has_result", result != nil,
+				"is_error", isError,
+				"err", ctrError,
+			)...)
 		}
 
-		isError := false
-		var ctrError error
-		if ctr, ok := result.(*mcp.CallToolResult); ok {
-			isError = ctr.IsError
-			ctrError = ctr.GetError()
+		// Emit one analytics event per MCP method. Gated on public mode +
+		// non-empty subscription_id; private/self-hosted deployments and
+		// pre-auth methods carry no user identifier and stay silent.
+		//
+		// All client-controlled string property values are capped via
+		// capForAmplitude to stay well under Amplitude's ~1024-char
+		// per-property limit. method/server_version/transport/error_class
+		// are server-controlled and bounded by construction.
+		if a.cfg.PublicMode && subID != "" {
+			props := map[string]any{
+				"method":         method,
+				"duration_ms":    duration.Milliseconds(),
+				"is_error":       isError || err != nil,
+				"server_version": a.version,
+				"transport":      a.cfg.Transport,
+			}
+			if toolName != "" {
+				props["tool_name"] = capForAmplitude(toolName)
+			}
+			if resourceURI != "" {
+				// Strip per-call identifiers from templated resource URIs
+				// before sending to Amplitude (long retention) so we never
+				// store specific event_ids etc. Static URIs pass through
+				// unchanged.
+				props["resource_uri"] = capForAmplitude(analyticsResourceURI(resourceURI))
+			}
+			if promptName != "" {
+				props["prompt_name"] = capForAmplitude(promptName)
+			}
+			if errorClass != "" {
+				props["error_class"] = errorClass
+			}
+			// Attach client_name/client_version as sticky Amplitude user
+			// properties on the initialize event only (clientName is empty
+			// for every other method). Amplitude treats event-level
+			// user_properties as updates that persist on the user, so all
+			// subsequent events from this sub_id inherit them at query
+			// time without needing a separate /identify call.
+			var userProps map[string]any
+			if clientName != "" {
+				userProps = map[string]any{
+					"client_name":    capForAmplitude(clientName),
+					"client_version": capForAmplitude(clientVersion),
+				}
+			}
+			a.opts.analyticsEmitter().Emit(analytics.Event{
+				Type:           "mcp_method_called",
+				UserID:         subID,
+				Properties:     props,
+				UserProperties: userProps,
+			})
 		}
-		a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
-			"duration_ms", duration.Milliseconds(),
-			"has_result", result != nil,
-			"is_error", isError,
-			"err", ctrError,
-		)...)
+
 		return result, err
 	}
 }

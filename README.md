@@ -65,6 +65,51 @@ The server can be configured via CLI flags or environment variables:
 | `--oauth-resource`     | `OAUTH_RESOURCE`                 |                                  | URL of this server (for OAuth metadata)                                  |
 | `--oauth-auth-server`  | `OAUTH_AUTH_SERVER`              |                                  | URL of the OAuth authorization server                                    |
 | `--jwks-url`           | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
+| `--amplitude-api-key`  | `MCP_AMPLITUDE_API_KEY`          |                                  | Amplitude project API key. Empty disables analytics (see Telemetry).     |
+| `--amplitude-endpoint` | `MCP_AMPLITUDE_ENDPOINT`         | `https://api2.amplitude.com/2/httpapi` | Amplitude HTTP V2 events URL. Override for EU residency.           |
+| `--amplitude-flush-interval` | `MCP_AMPLITUDE_FLUSH_INTERVAL` | `5s`                             | Maximum delay before the analytics worker flushes a partial batch.       |
+
+## Telemetry
+
+The hosted public-mode server can emit non-PII product-analytics events to
+Amplitude so the maintainers can answer basic questions like which tools are
+used most and what the integration funnel completion rate is. Events are
+keyed by Fingerprint `subscription_id` (pseudonymous within Amplitude — not
+truly anonymous) and never carry customer data; see the field list below.
+
+**Self-hosted users emit nothing.** Telemetry is gated on `--public` *and* a
+non-empty `MCP_AMPLITUDE_API_KEY`. Private/self-hosted deployments stay
+silent unconditionally — there is no opt-out flag because there is nothing
+to opt out of.
+
+When telemetry is enabled, every MCP method emits a single
+`mcp_method_called` event keyed by the caller's Fingerprint
+`subscription_id`. The full property list is:
+
+- `method` (e.g. `tools/call`, `resources/read`)
+- `tool_name` / `resource_uri` / `prompt_name` (whichever applies)
+- `duration_ms`
+- `is_error`, `error_class`
+- `server_version`, `transport`
+
+On `initialize`, the AI client name and version are attached as sticky
+Amplitude **user properties** (`client_name`, `client_version`) on the
+`initialize` event itself — Amplitude HTTP V2 supports per-event
+`user_properties` and persists them on the user, so subsequent events from
+the same `subscription_id` inherit them at query time without a separate
+identify call.
+
+The server **never** sends:
+
+- raw error messages,
+- tool arguments / request bodies,
+- tool results / response bodies,
+- IP/geo data,
+- API keys, JWTs, or other auth material.
+
+Delivery is fire-and-forget: a slow or unavailable Amplitude does not delay
+the request path; events are dropped under sustained pressure rather than
+blocking goroutines.
 
 ## Usage
 
