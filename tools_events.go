@@ -2,6 +2,7 @@ package fpmcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -109,7 +110,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		// Call Fingerprint API
 		event, _, err := fpClient.GetEvent(ctx, input.EventID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get event: %w", err)
+			return nil, nil, wrapFPError("failed to get event", err)
 		}
 
 		schema.FilterProducts(event, input.Products)
@@ -152,7 +153,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		}
 		events, _, err := fpClient.SearchEvents(ctx, searchReq)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to search events: %w", err)
+			return nil, nil, wrapFPError("failed to search events", err)
 		}
 
 		for i := range events.Events {
@@ -164,6 +165,48 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	})
 
 	return nil
+}
+
+// wrapFPError surfaces the Fingerprint API's structured error code and message
+// when present. The SDK's err.Error() is just the HTTP status text (e.g.
+// "403 Forbidden") or, when the response body fails strict-enum decoding,
+// the unmarshal error — neither tells the caller whether the failure was a
+// retention-window violation, region mismatch, missing key, etc.
+//
+// We try AsErrorResponse first (the structured path); if that fails we still
+// have the raw body on *GenericOpenAPIError, reachable via the Body() method
+// on the public error chain. Parsing it ourselves bypasses the SDK's enum
+// strictness, which currently rejects PascalCase codes the API actually emits.
+func wrapFPError(action string, err error) error {
+	if er, ok := fingerprint.AsErrorResponse(err); ok && er.Error.Message != "" {
+		return fmt.Errorf("%s: %s: %s", action, er.Error.Code, er.Error.Message)
+	}
+	var apiErr interface {
+		error
+		Body() []byte
+	}
+	if errors.As(err, &apiErr) {
+		if code, msg := parseFPErrorBody(apiErr.Body()); msg != "" {
+			if code != "" {
+				return fmt.Errorf("%s: %s: %s", action, code, msg)
+			}
+			return fmt.Errorf("%s: %s", action, msg)
+		}
+	}
+	return fmt.Errorf("%s: %w", action, err)
+}
+
+func parseFPErrorBody(body []byte) (code, message string) {
+	var b struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &b) != nil {
+		return "", ""
+	}
+	return b.Error.Code, b.Error.Message
 }
 
 // iiTransport is an http.RoundTripper that appends the "ii" query parameter
