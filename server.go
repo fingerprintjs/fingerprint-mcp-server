@@ -431,6 +431,18 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// analyticsResourceURI returns the URI in template form so that per-call
+// identifiers (e.g. event_ids) don't end up in long-retention analytics.
+// Static URIs (no path variables) pass through unchanged. Add cases here
+// when a new templated resource is registered.
+func analyticsResourceURI(uri string) string {
+	const eventsPrefix = "fingerprint://events/"
+	if strings.HasPrefix(uri, eventsPrefix) && len(uri) > len(eventsPrefix) {
+		return eventsPrefix + "{event_id}"
+	}
+	return uri
+}
+
 func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(
 		ctx context.Context,
@@ -542,7 +554,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				props["tool_name"] = toolName
 			}
 			if resourceURI != "" {
-				props["resource_uri"] = resourceURI
+				// Strip per-call identifiers from templated resource URIs
+				// before sending to Amplitude (long retention) so we never
+				// store specific event_ids etc. Static URIs pass through
+				// unchanged.
+				props["resource_uri"] = analyticsResourceURI(resourceURI)
 			}
 			if promptName != "" {
 				props["prompt_name"] = promptName
