@@ -394,6 +394,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
+		// resource_uri is logged as-is. Today the only templated URI is
+		// fingerprint://events/{event_id}, where event_id is an opaque
+		// server-issued identifier; the rest are static fingerprint://schemas/*
+		// URIs. Re-evaluate redaction here if a future resource embeds
+		// customer-identifying data directly in the URI.
 		if rr, ok := req.(*mcp.ReadResourceRequest); ok {
 			resourceURI = rr.Params.URI
 		}
