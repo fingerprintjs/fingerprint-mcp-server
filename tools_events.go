@@ -1,6 +1,7 @@
 package fpmcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -167,37 +168,60 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	return nil
 }
 
-// wrapFPError surfaces the Fingerprint API's structured error code and message
-// when present. The SDK's err.Error() is just the HTTP status text (e.g.
-// "403 Forbidden") or, when the response body fails strict-enum decoding,
-// the unmarshal error — neither tells the caller whether the failure was a
-// retention-window violation, region mismatch, missing key, etc.
+// wrapFPError surfaces the Fingerprint API error envelope to the MCP client.
 //
-// We try AsErrorResponse first (the structured path); if that fails we still
-// have the raw body on *GenericOpenAPIError, reachable via the Body() method
-// on the public error chain. Parsing it ourselves bypasses the SDK's enum
-// strictness, which currently rejects PascalCase codes the API actually emits.
+// We lead with a parsed "action: code: message" line for human readability, then
+// append the full response body verbatim. Including the body matters because
+// any field the API ships beyond {code, message} (per-error details, retry
+// hints, doc links, etc.) reaches the LLM tool call without further code
+// changes here — the surface of this wrapper is the API surface for new
+// fields. The SDK's err.Error() alone gives only HTTP status text or, on
+// strict-enum decode failure, the unmarshal complaint; neither carries that.
+//
+// Two extraction paths cover the same envelope: AsErrorResponse for codes the
+// SDK enum already knows (snake_case v4), and a raw body parse for codes the
+// enum rejects (v3-style PascalCase or codes added after this SDK version).
 func wrapFPError(action string, err error) error {
-	if er, ok := fingerprint.AsErrorResponse(err); ok && er.Error.Message != "" {
-		return &fpAPIError{
-			msg: fmt.Sprintf("%s: %s: %s", action, er.Error.Code, er.Error.Message),
-			err: err,
-		}
-	}
 	var apiErr interface {
 		error
 		Body() []byte
 	}
-	if errors.As(err, &apiErr) {
-		if code, msg := parseFPErrorBody(apiErr.Body()); msg != "" {
-			text := fmt.Sprintf("%s: %s", action, msg)
-			if code != "" {
-				text = fmt.Sprintf("%s: %s: %s", action, code, msg)
-			}
-			return &fpAPIError{msg: text, err: err}
-		}
+	if !errors.As(err, &apiErr) {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	body := apiErr.Body()
+
+	if er, ok := fingerprint.AsErrorResponse(err); ok && er.Error.Message != "" {
+		return newFPAPIError(action, string(er.Error.Code), er.Error.Message, body, err)
+	}
+	if code, msg := parseFPErrorBody(body); msg != "" {
+		return newFPAPIError(action, code, msg, body, err)
 	}
 	return fmt.Errorf("%s: %w", action, err)
+}
+
+func newFPAPIError(action, code, message string, body []byte, original error) error {
+	text := fmt.Sprintf("%s: %s", action, message)
+	if code != "" {
+		text = fmt.Sprintf("%s: %s: %s", action, code, message)
+	}
+	if compact := compactJSON(body); compact != "" {
+		text = text + "\n" + compact
+	}
+	return &fpAPIError{msg: text, err: original}
+}
+
+// compactJSON returns body re-serialized without whitespace if it parses as
+// JSON; empty string otherwise (so non-JSON bodies don't get appended raw).
+func compactJSON(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, body); err != nil {
+		return ""
+	}
+	return buf.String()
 }
 
 // fpAPIError carries the human-readable "action: code: message" text on the

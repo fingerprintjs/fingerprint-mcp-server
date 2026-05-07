@@ -536,21 +536,29 @@ func TestGetEvent_APIError(t *testing.T) {
 	}
 }
 
-// TestSearchEvents_APIError covers both wrapping paths.
+// TestSearchEvents_APIError covers both wrapping paths and the full-body
+// surfacing contract.
 //
 // Most rows use snake_case codes — that matches what API v4 actually ships,
 // and the SDK's typed ErrorCode enum decodes them, so wrapFPError surfaces
-// them via the structured fingerprint.AsErrorResponse model. The two trailing
-// rows use codes the enum rejects (PascalCase from API v3, or any code added
-// after this SDK version) to lock in the body-parse fallback.
+// them via the structured fingerprint.AsErrorResponse model. Trailing rows
+// use codes the enum rejects (PascalCase from API v3, or codes added after
+// this SDK version) to lock in the body-parse fallback. One row carries an
+// extra field beyond {code, message} to pin that future API additions reach
+// the MCP client without code changes here.
 //
 // CORE-200 is the first row: retention-window detail must reach the client.
+//
+// Each row's wantInText must also appear in the *raw body* line that
+// wrapFPError appends, not just the parsed leader — the body is what
+// future-proofs us against new fields.
 func TestSearchEvents_APIError(t *testing.T) {
 	cases := []struct {
 		name       string
 		status     int
 		code       string
 		message    string
+		extraJSON  string // appended inside the "error" object before serialization
 		wantInText []string
 	}{
 		// Structured-model path (snake_case codes matching the SDK enum).
@@ -614,6 +622,16 @@ func TestSearchEvents_APIError(t *testing.T) {
 			message:    "this client cannot decode the enum but the message must still surface",
 			wantInText: []string{"code_added_after_this_sdk_version", "must still surface"},
 		},
+		// Pins the full-body contract: any future field on the error envelope
+		// (here a synthetic retry hint) must reach the MCP client unchanged.
+		{
+			name:       "400 with extra field (future-proofing)",
+			status:     400,
+			code:       "request_cannot_be_parsed",
+			message:    "invalid start time, the start time cannot be older than 90 days",
+			extraJSON:  `,"retry_after_seconds":42,"docs_url":"https://docs.fingerprint.com/errors/retention"`,
+			wantInText: []string{"request_cannot_be_parsed", "older than 90 days", "retry_after_seconds", "42", "docs.fingerprint.com/errors/retention"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -621,7 +639,7 @@ func TestSearchEvents_APIError(t *testing.T) {
 			fpAPI := newMockFingerprintAPI()
 			defer fpAPI.close()
 			fpAPI.overrideStatus = tc.status
-			fpAPI.overrideBody = fmt.Sprintf(`{"error":{"code":%q,"message":%q}}`, tc.code, tc.message)
+			fpAPI.overrideBody = fmt.Sprintf(`{"error":{"code":%q,"message":%q%s}}`, tc.code, tc.message, tc.extraJSON)
 
 			ts := setupTestServer(t, &config.Config{
 				AuthToken:    defaultAuthToken,
