@@ -39,7 +39,7 @@ func (a *App) registerEventResource(_ context.Context) error {
 		// Call Fingerprint API
 		event, _, fpErr := fpClient.GetEvent(ctx, uriValues.Get("event_id").String())
 		if fpErr != nil {
-			return nil, fmt.Errorf("failed to get event: %w", fpErr)
+			return nil, wrapFPError("failed to get event", fpErr)
 		}
 
 		schema.StripAdditionalProperties(event)

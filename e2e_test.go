@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -525,7 +526,142 @@ func TestGetEvent_APIError(t *testing.T) {
 	result := mustCallTool(t, session, "get_event", map[string]any{"event_id": "nonexistent"})
 
 	if !result.IsError {
-		t.Error("expected error for 404 API response")
+		t.Fatal("expected error for 404 API response")
+	}
+	text := extractTextContent(t, result)
+	for _, want := range []string{"EventNotFound", "event not found"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("error %q missing %q (structured API error body must be surfaced, not just the HTTP status)", text, want)
+		}
+	}
+}
+
+// TestSearchEvents_APIError covers both wrapping paths and the full-body
+// surfacing contract.
+//
+// Most rows use snake_case codes — that matches what API v4 actually ships,
+// and the SDK's typed ErrorCode enum decodes them, so wrapFPError surfaces
+// them via the structured fingerprint.AsErrorResponse model. Trailing rows
+// use codes the enum rejects (PascalCase from API v3, or codes added after
+// this SDK version) to lock in the body-parse fallback. One row carries an
+// extra field beyond {code, message} to pin that future API additions reach
+// the MCP client without code changes here.
+//
+// CORE-200 is the first row: retention-window detail must reach the client.
+//
+// Each row's wantInText must also appear in the *raw body* line that
+// wrapFPError appends, not just the parsed leader — the body is what
+// future-proofs us against new fields.
+func TestSearchEvents_APIError(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		code       string
+		message    string
+		extraJSON  string // appended inside the "error" object before serialization
+		wantInText []string
+	}{
+		// Structured-model path (snake_case codes matching the SDK enum).
+		{
+			name:       "400 retention window (CORE-200)",
+			status:     400,
+			code:       "request_cannot_be_parsed",
+			message:    "start is older than the retention window",
+			wantInText: []string{"request_cannot_be_parsed", "retention window"},
+		},
+		{
+			name:       "403 secret api key required",
+			status:     403,
+			code:       "secret_api_key_required",
+			message:    "secret API key in header is missing or empty",
+			wantInText: []string{"secret_api_key_required", "missing or empty"},
+		},
+		{
+			name:       "403 secret api key not found",
+			status:     403,
+			code:       "secret_api_key_not_found",
+			message:    "no fingerprint workspace found for specified secret API key",
+			wantInText: []string{"secret_api_key_not_found", "no fingerprint workspace found"},
+		},
+		{
+			name:       "403 wrong region",
+			status:     403,
+			code:       "wrong_region",
+			message:    "server and workspace region differ",
+			wantInText: []string{"wrong_region", "region differ"},
+		},
+		{
+			name:       "403 subscription not active",
+			status:     403,
+			code:       "subscription_not_active",
+			message:    "fingerprint workspace is not active",
+			wantInText: []string{"subscription_not_active", "workspace is not active"},
+		},
+		{
+			name:       "429 too many requests",
+			status:     429,
+			code:       "too_many_requests",
+			message:    "the limit on secret API key requests per second has been exceeded",
+			wantInText: []string{"too_many_requests", "limit", "exceeded"},
+		},
+		// Body-parse fallback. PascalCase is what API v3 emits (and what the
+		// raw production curl returned earlier in this investigation); the SDK
+		// enum rejects it, so AsErrorResponse comes back false and we depend
+		// on the *GenericOpenAPIError.Body() path to recover the message.
+		{
+			name:       "403 v3-style PascalCase code (fallback)",
+			status:     403,
+			code:       "TokenNotFound",
+			message:    "secret key is not found",
+			wantInText: []string{"TokenNotFound", "secret key is not found"},
+		},
+		{
+			name:       "400 unknown future code (fallback)",
+			status:     400,
+			code:       "code_added_after_this_sdk_version",
+			message:    "this client cannot decode the enum but the message must still surface",
+			wantInText: []string{"code_added_after_this_sdk_version", "must still surface"},
+		},
+		// Pins the full-body contract: any future field on the error envelope
+		// (here a synthetic retry hint) must reach the MCP client unchanged.
+		{
+			name:       "400 with extra field (future-proofing)",
+			status:     400,
+			code:       "request_cannot_be_parsed",
+			message:    "invalid start time, the start time cannot be older than 90 days",
+			extraJSON:  `,"retry_after_seconds":42,"docs_url":"https://docs.fingerprint.com/errors/retention"`,
+			wantInText: []string{"request_cannot_be_parsed", "older than 90 days", "retry_after_seconds", "42", "docs.fingerprint.com/errors/retention"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fpAPI := newMockFingerprintAPI()
+			defer fpAPI.close()
+			fpAPI.overrideStatus = tc.status
+			fpAPI.overrideBody = fmt.Sprintf(`{"error":{"code":%q,"message":%q%s}}`, tc.code, tc.message, tc.extraJSON)
+
+			ts := setupTestServer(t, &config.Config{
+				AuthToken:    defaultAuthToken,
+				ServerAPIKey: "test-server-key",
+				ServerAPIURL: fpAPI.server.URL + "/v4",
+				Region:       "us",
+			})
+
+			session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+			limit := 1
+			result := mustCallTool(t, session, "search_events", map[string]any{"limit": limit})
+
+			if !result.IsError {
+				t.Fatalf("expected error for %d response", tc.status)
+			}
+			text := extractTextContent(t, result)
+			for _, want := range tc.wantInText {
+				if !strings.Contains(text, want) {
+					t.Errorf("error %q missing %q", text, want)
+				}
+			}
+		})
 	}
 }
 

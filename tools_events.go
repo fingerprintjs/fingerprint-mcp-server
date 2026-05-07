@@ -1,7 +1,9 @@
 package fpmcpserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -109,7 +111,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		// Call Fingerprint API
 		event, _, err := fpClient.GetEvent(ctx, input.EventID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get event: %w", err)
+			return nil, nil, wrapFPError("failed to get event", err)
 		}
 
 		schema.FilterProducts(event, input.Products)
@@ -152,7 +154,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		}
 		events, _, err := fpClient.SearchEvents(ctx, searchReq)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to search events: %w", err)
+			return nil, nil, wrapFPError("failed to search events", err)
 		}
 
 		for i := range events.Events {
@@ -164,6 +166,86 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	})
 
 	return nil
+}
+
+// wrapFPError surfaces the Fingerprint API error envelope to the MCP client.
+//
+// We lead with a parsed "action: code: message" line for human readability, then
+// append the full response body verbatim. Including the body matters because
+// any field the API ships beyond {code, message} (per-error details, retry
+// hints, doc links, etc.) reaches the LLM tool call without further code
+// changes here — the surface of this wrapper is the API surface for new
+// fields. The SDK's err.Error() alone gives only HTTP status text or, on
+// strict-enum decode failure, the unmarshal complaint; neither carries that.
+//
+// Two extraction paths cover the same envelope: AsErrorResponse for codes the
+// SDK enum already knows (snake_case v4), and a raw body parse for codes the
+// enum rejects (v3-style PascalCase or codes added after this SDK version).
+func wrapFPError(action string, err error) error {
+	var apiErr interface {
+		error
+		Body() []byte
+	}
+	if !errors.As(err, &apiErr) {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	body := apiErr.Body()
+
+	if er, ok := fingerprint.AsErrorResponse(err); ok && er.Error.Message != "" {
+		return newFPAPIError(action, string(er.Error.Code), er.Error.Message, body, err)
+	}
+	if code, msg := parseFPErrorBody(body); msg != "" {
+		return newFPAPIError(action, code, msg, body, err)
+	}
+	return fmt.Errorf("%s: %w", action, err)
+}
+
+func newFPAPIError(action, code, message string, body []byte, original error) error {
+	text := fmt.Sprintf("%s: %s", action, message)
+	if code != "" {
+		text = fmt.Sprintf("%s: %s: %s", action, code, message)
+	}
+	if compact := compactJSON(body); compact != "" {
+		text = text + "\n" + compact
+	}
+	return &fpAPIError{msg: text, err: original}
+}
+
+// compactJSON returns body re-serialized without whitespace if it parses as
+// JSON; empty string otherwise (so non-JSON bodies don't get appended raw).
+func compactJSON(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, body); err != nil {
+		return ""
+	}
+	return buf.String()
+}
+
+// fpAPIError carries the human-readable "action: code: message" text on the
+// surface while keeping the underlying SDK error reachable via errors.As /
+// errors.Is, so logs and downstream type-checks aren't blinded by the rewrite.
+type fpAPIError struct {
+	msg string
+	err error
+}
+
+func (e *fpAPIError) Error() string { return e.msg }
+func (e *fpAPIError) Unwrap() error { return e.err }
+
+func parseFPErrorBody(body []byte) (code, message string) {
+	var b struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &b) != nil {
+		return "", ""
+	}
+	return b.Error.Code, b.Error.Message
 }
 
 // iiTransport is an http.RoundTripper that appends the "ii" query parameter

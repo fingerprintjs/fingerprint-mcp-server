@@ -41,6 +41,7 @@ func newMockFingerprintAPI() *mockFingerprintAPI {
 		m.recordRequest(r)
 
 		if m.overrideStatus != 0 {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(m.overrideStatus)
 			_, _ = w.Write([]byte(m.overrideBody))
 			return
@@ -64,6 +65,7 @@ func newMockFingerprintAPI() *mockFingerprintAPI {
 		m.recordRequest(r)
 
 		if m.overrideStatus != 0 {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(m.overrideStatus)
 			_, _ = w.Write([]byte(m.overrideBody))
 			return
