@@ -390,10 +390,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		method string,
 		req mcp.Request,
 	) (mcp.Result, error) {
-		var toolName string
-		var resourceURI string
-		var promptName string
-		var clientInfo string
+		var toolName, resourceURI, promptName, clientInfo string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
@@ -404,59 +401,61 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			promptName = pr.Params.Name
 		}
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
-			ci := ir.Params.ClientInfo
-			if ci != nil {
+			if ci := ir.Params.ClientInfo; ci != nil {
 				clientInfo = ci.Name + "/" + ci.Version
 			}
 		}
 		subID, _ := req.GetExtra().TokenInfo.Extra[tokenExtraSubscriptionID].(string) // subID is optional
 
-		a.opts.logger().Debug("MCP method started",
-			"method", method,
-			"tool_name", toolName,
-			"resource_uri", resourceURI,
-			"prompt_name", promptName,
-			"has_params", req.GetParams() != nil,
-			"sub_id", subID,
-			"client_info", clientInfo,
-		)
+		// baseAttrs returns the common attributes for every log line. Optional
+		// fields are only included when populated to avoid empty-string noise on
+		// methods that don't carry them (e.g. resource_uri on tools/call).
+		baseAttrs := func() []any {
+			attrs := []any{"method", method}
+			if toolName != "" {
+				attrs = append(attrs, "tool_name", toolName)
+			}
+			if resourceURI != "" {
+				attrs = append(attrs, "resource_uri", resourceURI)
+			}
+			if promptName != "" {
+				attrs = append(attrs, "prompt_name", promptName)
+			}
+			if subID != "" {
+				attrs = append(attrs, "sub_id", subID)
+			}
+			if clientInfo != "" {
+				attrs = append(attrs, "client_info", clientInfo)
+			}
+			return attrs
+		}
+
+		a.opts.logger().Debug("MCP method started", append(baseAttrs(), "has_params", req.GetParams() != nil)...)
 
 		start := time.Now()
 		result, err := next(ctx, method, req)
 		duration := time.Since(start)
 
 		if err != nil {
-			a.opts.logger().Error("MCP method failed",
-				"method", method,
-				"tool_name", toolName,
-				"resource_uri", resourceURI,
-				"prompt_name", promptName,
+			a.opts.logger().Error("MCP method failed", append(baseAttrs(),
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
-				"sub_id", subID,
-				"client_info", clientInfo,
-			)
-		} else {
-			isError := false
-			var ctrError error
-			if ctr, ok := result.(*mcp.CallToolResult); ok {
-				isError = ctr.IsError
-				ctrError = ctr.GetError()
-			}
-
-			a.opts.logger().Debug("MCP method completed",
-				"method", method,
-				"tool_name", toolName,
-				"resource_uri", resourceURI,
-				"prompt_name", promptName,
-				"duration_ms", duration.Milliseconds(),
-				"has_result", result != nil,
-				"is_error", isError,
-				"err", ctrError,
-				"sub_id", subID,
-				"client_info", clientInfo,
-			)
+			)...)
+			return result, err
 		}
+
+		isError := false
+		var ctrError error
+		if ctr, ok := result.(*mcp.CallToolResult); ok {
+			isError = ctr.IsError
+			ctrError = ctr.GetError()
+		}
+		a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
+			"duration_ms", duration.Milliseconds(),
+			"has_result", result != nil,
+			"is_error", isError,
+			"err", ctrError,
+		)...)
 		return result, err
 	}
 }

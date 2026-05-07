@@ -929,7 +929,7 @@ func TestCORS_Options_PrivateMode(t *testing.T) {
 // TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
 // extracts resource_uri from resources/read requests and prompt_name from
 // prompts/get requests and includes them in the structured log line, mirroring
-// the existing tool_name extraction.
+// the existing tool_name extraction. Covers both happy and failure paths.
 func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
@@ -953,31 +953,52 @@ func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 		t.Fatalf("ReadResource(%s) failed: %v", resourceURI, err)
 	}
 
-	// "onboarding" is the SKILL.md prompt embedded under skills/.
-	const promptName = "onboarding"
+	// Discover an embedded prompt name at runtime so the test isn't coupled to
+	// a specific SKILL filename. registerPrompts walks skills/**/SKILL.md.
+	promptsList, err := session.ListPrompts(context.Background(), &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	if len(promptsList.Prompts) == 0 {
+		t.Fatal("expected at least one embedded prompt; check skills/ directory")
+	}
+	promptName := promptsList.Prompts[0].Name
 	if _, err := session.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: promptName}); err != nil {
 		t.Fatalf("GetPrompt(%s) failed: %v", promptName, err)
 	}
 
+	// Failure path: a URI that matches no registered resource or template
+	// makes the SDK return a protocol error, exercising the "MCP method failed"
+	// branch. The resource_uri attr should still be present on that log line.
+	const badURI = "fingerprint://does-not-exist/abc"
+	_, _ = session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: badURI})
+
 	records := handler.snapshot()
 
-	var sawResourceURI, sawPromptName bool
+	var sawResourceCompleted, sawPromptCompleted, sawResourceFailed bool
 	for _, r := range records {
 		attrs := recordAttrs(r)
-		if attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI {
-			sawResourceURI = true
-		}
-		if attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName {
-			sawPromptName = true
+		switch {
+		case r.Message == "MCP method completed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI:
+			sawResourceCompleted = true
+		case r.Message == "MCP method completed" && attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName:
+			sawPromptCompleted = true
+		case r.Message == "MCP method failed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == badURI:
+			sawResourceFailed = true
 		}
 	}
-	if !sawResourceURI {
-		t.Errorf("expected log record with method=resources/read and resource_uri=%q; got %d records", resourceURI, len(records))
+	if !sawResourceCompleted {
+		t.Errorf("expected MCP method completed with method=resources/read and resource_uri=%q", resourceURI)
+	}
+	if !sawPromptCompleted {
+		t.Errorf("expected MCP method completed with method=prompts/get and prompt_name=%q", promptName)
+	}
+	if !sawResourceFailed {
+		t.Errorf("expected MCP method failed with method=resources/read and resource_uri=%q", badURI)
+	}
+	if t.Failed() {
 		for _, r := range records {
-			t.Logf("  record: %s %v", r.Message, recordAttrs(r))
+			t.Logf("  %s %v", r.Message, recordAttrs(r))
 		}
-	}
-	if !sawPromptName {
-		t.Errorf("expected log record with method=prompts/get and prompt_name=%q", promptName)
 	}
 }
