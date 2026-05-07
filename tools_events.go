@@ -179,7 +179,10 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 // strictness, which currently rejects PascalCase codes the API actually emits.
 func wrapFPError(action string, err error) error {
 	if er, ok := fingerprint.AsErrorResponse(err); ok && er.Error.Message != "" {
-		return fmt.Errorf("%s: %s: %s", action, er.Error.Code, er.Error.Message)
+		return &fpAPIError{
+			msg: fmt.Sprintf("%s: %s: %s", action, er.Error.Code, er.Error.Message),
+			err: err,
+		}
 	}
 	var apiErr interface {
 		error
@@ -187,14 +190,26 @@ func wrapFPError(action string, err error) error {
 	}
 	if errors.As(err, &apiErr) {
 		if code, msg := parseFPErrorBody(apiErr.Body()); msg != "" {
+			text := fmt.Sprintf("%s: %s", action, msg)
 			if code != "" {
-				return fmt.Errorf("%s: %s: %s", action, code, msg)
+				text = fmt.Sprintf("%s: %s: %s", action, code, msg)
 			}
-			return fmt.Errorf("%s: %s", action, msg)
+			return &fpAPIError{msg: text, err: err}
 		}
 	}
 	return fmt.Errorf("%s: %w", action, err)
 }
+
+// fpAPIError carries the human-readable "action: code: message" text on the
+// surface while keeping the underlying SDK error reachable via errors.As /
+// errors.Is, so logs and downstream type-checks aren't blinded by the rewrite.
+type fpAPIError struct {
+	msg string
+	err error
+}
+
+func (e *fpAPIError) Error() string { return e.msg }
+func (e *fpAPIError) Unwrap() error { return e.err }
 
 func parseFPErrorBody(body []byte) (code, message string) {
 	var b struct {

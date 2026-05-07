@@ -1,6 +1,7 @@
 package fpmcpserver
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +10,48 @@ import (
 	"github.com/fingerprintjs/fingerprint-mcp-server/internal/schema"
 	"github.com/fingerprintjs/go-sdk/v8"
 )
+
+// TestWrapFPError_PreservesUnwrap pins the contract that wrapFPError keeps the
+// original SDK error in the chain even when it rewrites the surface text.
+// Without Unwrap, downstream errors.Is/errors.As checks (e.g. for retries on
+// a sentinel error) silently start failing after this layer.
+func TestWrapFPError_PreservesUnwrap(t *testing.T) {
+	t.Run("body-parse path", func(t *testing.T) {
+		// Stand in for *openapi.GenericOpenAPIError: any error implementing
+		// Body() []byte takes the body-parse branch.
+		bodyErr := &fakeBodyErr{
+			msg:  "400 Bad Request",
+			body: []byte(`{"error":{"code":"request_cannot_be_parsed","message":"start is older than the retention window"}}`),
+		}
+		got := wrapFPError("failed to search events", bodyErr)
+		if !strings.Contains(got.Error(), "retention window") {
+			t.Fatalf("surface text missing structured detail: %q", got.Error())
+		}
+		if !errors.Is(got, bodyErr) {
+			t.Errorf("errors.Is must reach the wrapped SDK error; chain breaks debuggability")
+		}
+		var unwrapped *fakeBodyErr
+		if !errors.As(got, &unwrapped) {
+			t.Errorf("errors.As must reach the wrapped SDK error type")
+		}
+	})
+
+	t.Run("plain fallback path", func(t *testing.T) {
+		base := errors.New("network unreachable")
+		got := wrapFPError("failed to get event", base)
+		if !errors.Is(got, base) {
+			t.Errorf("plain non-API errors must remain in the chain via %%w")
+		}
+	})
+}
+
+type fakeBodyErr struct {
+	msg  string
+	body []byte
+}
+
+func (e *fakeBodyErr) Error() string { return e.msg }
+func (e *fakeBodyErr) Body() []byte  { return e.body }
 
 // TestSearchEventInputToRequest_StartEndRFC3339 verifies that RFC3339 strings on
 // the MCP surface are parsed into the equivalent UnixMilli values that the
