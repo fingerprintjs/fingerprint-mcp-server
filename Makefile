@@ -10,7 +10,7 @@ build: generate
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o fingerprint-mcp-server ./cmd/fingerprint-mcp-server
 
 test:
-	go test -v -count=1 ./...
+	go test -race -v -count=1 ./...
 
 PLATFORM ?= linux/$(shell go env GOARCH)
 
