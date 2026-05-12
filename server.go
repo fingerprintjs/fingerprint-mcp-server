@@ -403,7 +403,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		extra := req.GetExtra()
 		var subID string // subID is optional
-		if extra != nil {
+		if extra != nil && extra.TokenInfo != nil {
 			subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
 		}
 
