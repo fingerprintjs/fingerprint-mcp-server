@@ -413,27 +413,6 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// extractClientIP returns the caller IP from common load-balancer headers,
-// preferring X-Forwarded-For (first IP of a comma-separated chain, the
-// original client by convention) and falling back to X-Real-IP. Returns ""
-// when neither header is set or headers are nil (e.g. stdio transport),
-// which surfaces as an empty Event.IP and lets backends omit the field.
-func extractClientIP(h http.Header) string {
-	if h == nil {
-		return ""
-	}
-	if xff := h.Get("X-Forwarded-For"); xff != "" {
-		if comma := strings.Index(xff, ","); comma >= 0 {
-			return strings.TrimSpace(xff[:comma])
-		}
-		return strings.TrimSpace(xff)
-	}
-	if rip := h.Get("X-Real-IP"); rip != "" {
-		return strings.TrimSpace(rip)
-	}
-	return ""
-}
-
 func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(
 		ctx context.Context,
@@ -468,12 +447,10 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// configured AuthToken. Guard both dereferences so the middleware
 		// doesn't panic in those paths.
 		var subID string
-		var clientIP string
 		if extra := req.GetExtra(); extra != nil {
 			if extra.TokenInfo != nil {
 				subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
 			}
-			clientIP = extractClientIP(extra.Header)
 		}
 
 		// baseAttrs returns the common attributes for every log line. Optional
@@ -550,7 +527,6 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			req:           req,
 			method:        method,
 			subID:         subID,
-			clientIP:      clientIP,
 			toolName:      toolName,
 			resourceURI:   resourceURI,
 			promptName:    promptName,

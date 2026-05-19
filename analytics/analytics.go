@@ -26,10 +26,6 @@ type Event struct {
 	// SubscriptionID. Typically populated only on the first event of a
 	// session, e.g. `initialize` with client_name / client_version.
 	UserProperties map[string]any
-	// IP is the caller's address (typically read from X-Forwarded-For at the
-	// edge), forwarded to backends that derive geo from it. Empty leaves geo
-	// unset, which is the right default for non-HTTP transports.
-	IP string
 }
 
 // Emitter is the minimum surface the server needs to deliver events. It is

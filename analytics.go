@@ -2,32 +2,18 @@ package fpmcpserver
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/analytics"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// analyticsResourceURI redacts per-call identifiers from templated MCP
-// resource URIs before they're sent to long-retention analytics. Today the
-// only templated URI is `fingerprint://events/{event_id}`; static URIs
-// (e.g. `fingerprint://schemas/event`) pass through unchanged.
-func analyticsResourceURI(uri string) string {
-	const eventsPrefix = "fingerprint://events/"
-	if len(uri) > len(eventsPrefix) && strings.HasPrefix(uri, eventsPrefix) {
-		return eventsPrefix + "{event_id}"
-	}
-	return uri
-}
-
 // analyticsInputs bundles the values emitAnalytics needs from the
 // middleware so the call site stays a single line.
 type analyticsInputs struct {
-	req      mcp.Request
-	method   string
-	subID    string
-	clientIP string
+	req    mcp.Request
+	method string
+	subID  string
 
 	toolName, resourceURI, promptName string
 	clientName, clientVersion         string
@@ -47,8 +33,10 @@ type analyticsInputs struct {
 // default emitter is a no-op, so embedders that don't pass WithAnalytics
 // pay nothing regardless.
 //
-// String-property capping (for wire-format limits) is the responsibility
-// of the concrete emitter implementation, not this function.
+// Properties are reported as-is. Any redaction or capping that a specific
+// backend needs (wire-format limits, sensitive-field stripping, etc.) is
+// the responsibility of the concrete emitter implementation, not this
+// function.
 func (a *App) emitAnalytics(in analyticsInputs) {
 	if in.subID == "" {
 		return
@@ -65,7 +53,7 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 		props["tool_name"] = in.toolName
 	}
 	if in.resourceURI != "" {
-		props["resource_uri"] = analyticsResourceURI(in.resourceURI)
+		props["resource_uri"] = in.resourceURI
 	}
 	if in.promptName != "" {
 		props["prompt_name"] = in.promptName
@@ -120,6 +108,5 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 		SubscriptionID: in.subID,
 		Properties:     props,
 		UserProperties: userProps,
-		IP:             in.clientIP,
 	})
 }
