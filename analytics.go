@@ -93,20 +93,17 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 			props["result_size_bytes"] = int64(len(b))
 		}
 	}
-	// client_name/client_version ride only on the initialize event;
-	// backends that support UserProperties stick them on the subscription
-	// so later events inherit them at query time.
-	var userProps map[string]any
+	// client_name/client_version are only known on initialize (that's the
+	// only method that carries ClientInfo). They're per-session, not
+	// per-subscription, so they ride along as regular event properties on
+	// the initialize event and aren't repeated on later events.
 	if in.clientName != "" {
-		userProps = map[string]any{
-			"client_name":    in.clientName,
-			"client_version": in.clientVersion,
-		}
+		props["client_name"] = in.clientName
+		props["client_version"] = in.clientVersion
 	}
 	a.opts.analyticsEmitter().Emit(analytics.Event{
 		Type:           "mcp_method_called",
 		SubscriptionID: in.subID,
 		Properties:     props,
-		UserProperties: userProps,
 	})
 }

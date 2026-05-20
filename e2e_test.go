@@ -1305,7 +1305,7 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	}
 
 	methods := map[string]bool{}
-	var sawInitializeWithUserProps bool
+	var sawInitializeWithClientName bool
 	for _, ev := range events {
 		if ev.Type != "mcp_method_called" || ev.SubscriptionID != subID {
 			continue
@@ -1322,12 +1322,12 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 		if _, ok := ev.Properties["duration_ms"]; !ok {
 			t.Errorf("%s: missing duration_ms property", method)
 		}
-		// initialize is the only method that carries user_properties.
+		// initialize is the only method that carries client_name/client_version.
 		if method == "initialize" {
-			if ev.UserProperties["client_name"] != "test-client" {
-				t.Errorf("initialize: user_properties.client_name=%v, want test-client", ev.UserProperties["client_name"])
+			if ev.Properties["client_name"] != "test-client" {
+				t.Errorf("initialize: client_name=%v, want test-client", ev.Properties["client_name"])
 			}
-			sawInitializeWithUserProps = true
+			sawInitializeWithClientName = true
 		}
 	}
 	if !methods["initialize"] {
@@ -1336,8 +1336,8 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	if !methods["tools/list"] {
 		t.Errorf("expected an mcp_method_called event with method=tools/list, got methods=%v", methods)
 	}
-	if !sawInitializeWithUserProps {
-		t.Errorf("expected the initialize event to carry user_properties.client_name")
+	if !sawInitializeWithClientName {
+		t.Errorf("expected the initialize event to carry client_name in Properties")
 	}
 }
 

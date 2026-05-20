@@ -16,16 +16,11 @@ import "context"
 type Event struct {
 	// Type is the event name, e.g. "mcp_method_called".
 	Type string
-	// SubscriptionID identifies the actor (MCP has no "user" concept).
-	// Backends typically map it to their own user identifier.
+	// SubscriptionID is the Fingerprint subscription this event is
+	// attributed to. Required.
 	SubscriptionID string
 	// Properties are arbitrary, JSON-serialisable event properties.
 	Properties map[string]any
-	// UserProperties stick to the actor when set; backends with this concept
-	// (e.g. Amplitude) inherit them on subsequent events from the same
-	// SubscriptionID. Typically populated only on the first event of a
-	// session, e.g. `initialize` with client_name / client_version.
-	UserProperties map[string]any
 }
 
 // Emitter is the minimum surface the server needs to deliver events. It is
