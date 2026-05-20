@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -18,6 +19,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // --- Group 1: ListTools ---
@@ -1153,5 +1155,244 @@ func TestCORS_Options_PrivateMode(t *testing.T) {
 	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
 	if strings.Contains(allowHeaders, "Authorization") {
 		t.Errorf("expected Authorization NOT in allowed headers for private mode, got %q", allowHeaders)
+	}
+}
+
+// TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
+// extracts resource_uri from resources/read requests and prompt_name from
+// prompts/get requests and includes them in the structured log line, mirroring
+// the existing tool_name extraction. Covers both happy and failure paths.
+func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	handler := newCaptureHandler()
+	logger := slog.New(handler)
+
+	cfg := &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+	}
+	ts := setupTestServerWithLogger(t, cfg, logger)
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	// Static schema resource — no upstream API call needed.
+	const resourceURI = "fingerprint://schemas/event"
+	if _, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: resourceURI}); err != nil {
+		t.Fatalf("ReadResource(%s) failed: %v", resourceURI, err)
+	}
+
+	// Discover an embedded prompt name at runtime so the test isn't coupled to
+	// a specific SKILL filename. registerPrompts walks skills/**/SKILL.md.
+	promptsList, err := session.ListPrompts(context.Background(), &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	if len(promptsList.Prompts) == 0 {
+		t.Fatal("expected at least one embedded prompt; check skills/ directory")
+	}
+	promptName := promptsList.Prompts[0].Name
+	if _, err := session.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: promptName}); err != nil {
+		t.Fatalf("GetPrompt(%s) failed: %v", promptName, err)
+	}
+
+	// Failure path: a URI that matches no registered resource or template
+	// makes the SDK return a protocol error, exercising the "MCP method failed"
+	// branch. The resource_uri attr should still be present on that log line.
+	const badURI = "fingerprint://does-not-exist/abc"
+	_, _ = session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: badURI})
+
+	records := handler.snapshot()
+
+	// Assert the new fields populate on the started, completed, and failed
+	// records so a regression that touches only one branch (e.g. someone
+	// adds a new field on completed but forgets started) fails the test.
+	var sawResourceStarted, sawResourceCompleted bool
+	var sawPromptStarted, sawPromptCompleted bool
+	var sawResourceFailed bool
+	for _, r := range records {
+		attrs := recordAttrs(r)
+		switch {
+		case r.Message == "MCP method started" && attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI:
+			sawResourceStarted = true
+		case r.Message == "MCP method completed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == resourceURI:
+			sawResourceCompleted = true
+		case r.Message == "MCP method started" && attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName:
+			sawPromptStarted = true
+		case r.Message == "MCP method completed" && attrs["method"] == "prompts/get" && attrs["prompt_name"] == promptName:
+			sawPromptCompleted = true
+		case r.Message == "MCP method failed" && attrs["method"] == "resources/read" && attrs["resource_uri"] == badURI:
+			sawResourceFailed = true
+		}
+	}
+	if !sawResourceStarted {
+		t.Errorf("expected MCP method started with method=resources/read and resource_uri=%q", resourceURI)
+	}
+	if !sawResourceCompleted {
+		t.Errorf("expected MCP method completed with method=resources/read and resource_uri=%q", resourceURI)
+	}
+	if !sawPromptStarted {
+		t.Errorf("expected MCP method started with method=prompts/get and prompt_name=%q", promptName)
+	}
+	if !sawPromptCompleted {
+		t.Errorf("expected MCP method completed with method=prompts/get and prompt_name=%q", promptName)
+	}
+	if !sawResourceFailed {
+		t.Errorf("expected MCP method failed with method=resources/read and resource_uri=%q", badURI)
+	}
+	if t.Failed() {
+		for _, r := range records {
+			t.Logf("  %s %v", r.Message, recordAttrs(r))
+		}
+	}
+}
+
+// signFpjsJWTWithSubID mints a Fingerprint-issued JWT carrying the
+// urn:fingerprint:sub_id claim, which surfaces as Event.SubscriptionID on
+// analytics events.
+func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, subID string) string {
+	t.Helper()
+	builder := jwt.NewBuilder().
+		Subject(subject).
+		Issuer(fpjsJWTIssuer).
+		Expiration(time.Now().Add(time.Hour))
+	if subID != "" {
+		builder = builder.Claim(claimSubscriptionID, subID)
+	}
+	token, err := builder.Build()
+	if err != nil {
+		t.Fatalf("building JWT: %v", err)
+	}
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, privateKey))
+	if err != nil {
+		t.Fatalf("signing JWT: %v", err)
+	}
+	return string(signed)
+}
+
+func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newRecordingEmitter()
+
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	// Public-mode JWT carries serverKey-mgmtKey-region in the subject and the
+	// subscription_id as a custom claim.
+	const subID = "sub_test_xyz"
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", subID)
+
+	session := mustConnectMCPClient(t, ts.URL, token)
+
+	// initialize is implicit on Connect. Drive a tools/list to land an event.
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	events := emitter.snapshot()
+	if len(events) == 0 {
+		t.Fatal("expected at least one analytics event, got 0")
+	}
+
+	methods := map[string]bool{}
+	var sawInitializeWithClientName bool
+	for _, ev := range events {
+		if ev.Type != "mcp_method_called" || ev.SubscriptionID != subID {
+			continue
+		}
+		method, _ := ev.Properties["method"].(string)
+		if method == "" {
+			t.Errorf("event missing method property: %+v", ev.Properties)
+			continue
+		}
+		methods[method] = true
+		if ev.Properties["transport"] != "streamable-http" {
+			t.Errorf("%s: transport=%v, want streamable-http", method, ev.Properties["transport"])
+		}
+		if _, ok := ev.Properties["duration_ms"]; !ok {
+			t.Errorf("%s: missing duration_ms property", method)
+		}
+		// initialize is the only method that carries client_name/client_version.
+		if method == "initialize" {
+			if ev.Properties["client_name"] != "test-client" {
+				t.Errorf("initialize: client_name=%v, want test-client", ev.Properties["client_name"])
+			}
+			sawInitializeWithClientName = true
+		}
+	}
+	if !methods["initialize"] {
+		t.Errorf("expected an mcp_method_called event with method=initialize, got methods=%v", methods)
+	}
+	if !methods["tools/list"] {
+		t.Errorf("expected an mcp_method_called event with method=tools/list, got methods=%v", methods)
+	}
+	if !sawInitializeWithClientName {
+		t.Errorf("expected the initialize event to carry client_name in Properties")
+	}
+}
+
+func TestAnalytics_PrivateMode_EmitsNothing(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	emitter := newRecordingEmitter()
+
+	cfg := &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+		Transport:    "streamable-http",
+		// PublicMode left false. There's no JWT path, so the middleware
+		// never sees a subscription_id and the analytics gate stays shut.
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	if got := len(emitter.snapshot()); got != 0 {
+		t.Errorf("private mode should emit 0 events, got %d", got)
+		for _, ev := range emitter.snapshot() {
+			t.Logf("  type=%s sub=%s props=%v", ev.Type, ev.SubscriptionID, ev.Properties)
+		}
+	}
+}
+
+func TestAnalytics_PublicMode_NoSubID_EmitsNothing(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newRecordingEmitter()
+
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+	// Mint a JWT WITHOUT the subscription_id claim. The auth path still
+	// succeeds (subID is optional), but with no user identifier the analytics
+	// gate stays closed and no event leaves the process.
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "")
+
+	session := mustConnectMCPClient(t, ts.URL, token)
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	if got := len(emitter.snapshot()); got != 0 {
+		t.Errorf("missing sub_id should result in 0 emitted events, got %d", got)
 	}
 }
