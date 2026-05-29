@@ -15,6 +15,7 @@
   "ip_blocklist",
   "ip_info",
   "jailbroken",
+  "labels",
   "location_spoofing",
   "mitm_attack",
   "privacy_settings",

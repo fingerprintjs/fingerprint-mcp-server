@@ -213,17 +213,26 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 }
 
 // SearchEventInputToRequest converts a SearchEventInput into a fingerprint.SearchEventRequest.
-// Returns an error if start/end are not valid RFC3339, or if any bot_info_* filter is set
-// before the SDK exposes it (tracked in INTER-2013).
+// Returns an error if start/end are not valid RFC3339.
 func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEventRequest, error) {
 	req := fingerprint.NewSearchEventsRequest()
-	// bot_info filters are surfaced on the MCP schema (GROW-614 / PLAT-1715)
-	// but the underlying Go SDK does not yet provide request builders for
-	// them (INTER-2013). Surface the gap clearly so callers don't get a
-	// silent drop of their filter; remove these checks and add the
-	// req.BotInfo*(...) calls in the same place once the SDK ships.
-	if name := firstSetBotInfoFilter(input); name != "" {
-		return req, fmt.Errorf("filter %q is accepted by the API but not yet wired through the Go SDK; tracked in INTER-2013 and GROW-614", name)
+	if s, ok := input.BotInfo.(string); ok {
+		req = req.BotInfo(fingerprint.SearchEventsBotInfo(s))
+	}
+	if len(input.BotInfoCategory) > 0 {
+		req = req.BotInfoCategory(toEnumSlice[fingerprint.BotInfoCategory](input.BotInfoCategory))
+	}
+	if len(input.BotInfoIdentity) > 0 {
+		req = req.BotInfoIdentity(toEnumSlice[fingerprint.BotInfoIdentity](input.BotInfoIdentity))
+	}
+	if len(input.BotInfoConfidence) > 0 {
+		req = req.BotInfoConfidence(toEnumSlice[fingerprint.BotInfoConfidence](input.BotInfoConfidence))
+	}
+	if len(input.BotInfoProvider) > 0 {
+		req = req.BotInfoProvider(input.BotInfoProvider)
+	}
+	if len(input.BotInfoName) > 0 {
+		req = req.BotInfoName(input.BotInfoName)
 	}
 	if input.Limit != nil {
 		req = req.Limit(*input.Limit)
@@ -353,29 +362,12 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 	return req, nil
 }
 
-// firstSetBotInfoFilter returns the JSON name of the first bot_info_* field
-// that has a non-zero value, or "" if none is set. Used to short-circuit with
-// a clear error until the SDK ships the matching request builders.
-func firstSetBotInfoFilter(input *SearchEventInput) string {
-	if input.BotInfo != nil {
-		return "bot_info"
+func toEnumSlice[T ~string](in []string) []T {
+	out := make([]T, len(in))
+	for i, v := range in {
+		out[i] = T(v)
 	}
-	if len(input.BotInfoCategory) > 0 {
-		return "bot_info_category"
-	}
-	if len(input.BotInfoProvider) > 0 {
-		return "bot_info_provider"
-	}
-	if len(input.BotInfoName) > 0 {
-		return "bot_info_name"
-	}
-	if len(input.BotInfoIdentity) > 0 {
-		return "bot_info_identity"
-	}
-	if len(input.BotInfoConfidence) > 0 {
-		return "bot_info_confidence"
-	}
-	return ""
+	return out
 }
 
 func MustInferSchema[T any]() json.RawMessage {
