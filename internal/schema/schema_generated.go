@@ -60,5 +60,11 @@ type SearchEventInput struct {
 	TorNode                         *bool `json:"tor_node,omitempty"`
 	IncrementalIdentificationStatus any `json:"incremental_identification_status,omitempty"`
 	Simulator                       *bool `json:"simulator,omitempty"`
+	BotInfo                         *string `json:"bot_info,omitempty"`
+	BotInfoCategory                 []string `json:"bot_info_category,omitempty"`
+	BotInfoProvider                 []string `json:"bot_info_provider,omitempty"`
+	BotInfoName                     []string `json:"bot_info_name,omitempty"`
+	BotInfoIdentity                 []string `json:"bot_info_identity,omitempty"`
+	BotInfoConfidence               []string `json:"bot_info_confidence,omitempty"`
 	Products                        []string `json:"products,omitempty"`
 }

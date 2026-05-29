@@ -19,6 +19,54 @@
       ],
       "type": "string"
     },
+    "bot_info": {
+      "description": "Filter events by whether any bot was detected. \"any\" returns events with a \"bot_info\" Smart Signal result; \"none\" returns events without one. Combine with bot_info_category / bot_info_identity / bot_info_confidence to narrow further.",
+      "enum": [
+        "none",
+        "any"
+      ],
+      "type": "string"
+    },
+    "bot_info_category": {
+      "description": "Filter by \"bot_info.category\" using IN matching. Pass one or more category values; events matching any of them are returned. See Fingerprint bot signatures documentation for the current category enum (e.g. \"search_engine\", \"monitoring\", \"scraper\").",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_confidence": {
+      "description": "Filter by \"bot_info.confidence\" using IN matching. Each value must be one of \"high\", \"medium\", \"low\".",
+      "items": {
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_identity": {
+      "description": "Filter by \"bot_info.identity\" using IN matching. Pass one or more identity values; events matching any of them are returned. See Fingerprint bot signatures documentation for the current identity enum.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_name": {
+      "description": "Filter by \"bot_info.name\" using IN matching. Pass one or more bot name strings exactly; events matching any of them are returned.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_provider": {
+      "description": "Filter by \"bot_info.provider\" using IN matching. Pass one or more provider names exactly; events matching any of them are returned. Provider strings are free-form (e.g. \"googlebot\", \"bingbot\").",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "bundle_id": {
       "description": "Filter events by the Bundle ID (iOS) associated with the event.\n",
       "type": "string"

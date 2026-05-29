@@ -262,6 +262,42 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 		"description": rfc3339EndDescription,
 	}
 
+	// bot_info filters from PLAT-1715. The Go SDK does not yet expose request
+	// builders for these (tracked in INTER-2013), so SearchEventInputToRequest
+	// currently rejects any bot_info_* input with a clear error. Surfacing
+	// them here keeps the MCP schema in sync with the API and reduces the SDK
+	// follow-up to a one-place rewire. Tracked in GROW-614.
+	properties["bot_info"] = map[string]any{
+		"type":        "string",
+		"enum":        []any{"none", "any"},
+		"description": botInfoDescription,
+	}
+	properties["bot_info_category"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string"},
+		"description": botInfoCategoryDescription,
+	}
+	properties["bot_info_provider"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string"},
+		"description": botInfoProviderDescription,
+	}
+	properties["bot_info_name"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string"},
+		"description": botInfoNameDescription,
+	}
+	properties["bot_info_identity"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string"},
+		"description": botInfoIdentityDescription,
+	}
+	properties["bot_info_confidence"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string", "enum": []any{"high", "medium", "low"}},
+		"description": botInfoConfidenceDescription,
+	}
+
 	sort.Strings(required)
 
 	schema := map[string]any{
@@ -283,6 +319,18 @@ Always derive timestamps from the current real-world wall-clock time. Do NOT reu
 const rfc3339EndDescription = `Upper bound of the time window (inclusive) as an RFC3339 timestamp. UTC ("YYYY-MM-DDTHH:MM:SSZ") or with timezone offset ("YYYY-MM-DDTHH:MM:SS±hh:mm"); fractional seconds are accepted. Defaults to now. Setting "end" does not change "start"'s default of "7 days ago"; adjust it separately if needed.
 
 Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are typically retained for ~90 days (varies by plan).`
+
+const botInfoDescription = `Filter events by whether any bot was detected. "any" returns events with a "bot_info" Smart Signal result; "none" returns events without one. Combine with bot_info_category / bot_info_identity / bot_info_confidence to narrow further.`
+
+const botInfoCategoryDescription = `Filter by "bot_info.category" using IN matching. Pass one or more category values; events matching any of them are returned. See Fingerprint bot signatures documentation for the current category enum (e.g. "search_engine", "monitoring", "scraper").`
+
+const botInfoProviderDescription = `Filter by "bot_info.provider" using IN matching. Pass one or more provider names exactly; events matching any of them are returned. Provider strings are free-form (e.g. "googlebot", "bingbot").`
+
+const botInfoNameDescription = `Filter by "bot_info.name" using IN matching. Pass one or more bot name strings exactly; events matching any of them are returned.`
+
+const botInfoIdentityDescription = `Filter by "bot_info.identity" using IN matching. Pass one or more identity values; events matching any of them are returned. See Fingerprint bot signatures documentation for the current identity enum.`
+
+const botInfoConfidenceDescription = `Filter by "bot_info.confidence" using IN matching. Each value must be one of "high", "medium", "low".`
 
 // collectRefs recursively collects all schemas referenced from the given root schema name.
 func collectRefs(allSchemas map[string]any, name string, collected map[string]any) {
@@ -530,6 +578,21 @@ func generateSearchEventInputStruct(spec map[string]any) (string, error) {
 			goName:  goName,
 			goType:  goType,
 			jsonTag: jsonTag,
+		})
+	}
+
+	// bot_info filters (GROW-614 / PLAT-1715). Added here because they aren't
+	// in the SDK's OpenAPI spec yet; SearchEventInputToRequest gates them on
+	// the SDK update tracked in INTER-2013.
+	for _, name := range []string{"bot_info", "bot_info_category", "bot_info_provider", "bot_info_name", "bot_info_identity", "bot_info_confidence"} {
+		goType := "*string"
+		if name != "bot_info" {
+			goType = "[]string"
+		}
+		fields = append(fields, fieldDef{
+			goName:  snakeToPascal(name),
+			goType:  goType,
+			jsonTag: name + ",omitempty",
 		})
 	}
 

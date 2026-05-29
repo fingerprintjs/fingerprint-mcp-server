@@ -138,14 +138,67 @@ func TestSearchEventInputToRequest_InvalidEndReturnsError(t *testing.T) {
 	}
 }
 
+// TestSearchEventInputToRequest_BotInfoNotYetWired pins the stub-error
+// behavior for the bot_info_* filters surfaced ahead of the SDK update
+// (GROW-614 / INTER-2013). Each row sets exactly one field and asserts the
+// returned error names that field plus the tracking ticket so an LLM caller
+// gets a concrete reason instead of a silent drop.
+//
+// When the SDK ships the BotInfo*(...) builders, replace this test with one
+// that asserts each field is forwarded to the SDK request (mirror the
+// _StartEndRFC3339 pattern), and remove firstSetBotInfoFilter from schema.go.
+func TestSearchEventInputToRequest_BotInfoNotYetWired(t *testing.T) {
+	any := "any"
+	cases := []struct {
+		name     string
+		input    schema.SearchEventInput
+		wantName string
+	}{
+		{"bot_info", schema.SearchEventInput{BotInfo: &any}, "bot_info"},
+		{"bot_info_category", schema.SearchEventInput{BotInfoCategory: []string{"search_engine"}}, "bot_info_category"},
+		{"bot_info_provider", schema.SearchEventInput{BotInfoProvider: []string{"googlebot"}}, "bot_info_provider"},
+		{"bot_info_name", schema.SearchEventInput{BotInfoName: []string{"GoogleBot"}}, "bot_info_name"},
+		{"bot_info_identity", schema.SearchEventInput{BotInfoIdentity: []string{"verified"}}, "bot_info_identity"},
+		{"bot_info_confidence", schema.SearchEventInput{BotInfoConfidence: []string{"high"}}, "bot_info_confidence"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := schema.SearchEventInputToRequest(&tc.input)
+			if err == nil {
+				t.Fatal("expected stub error until SDK exposes bot_info filters")
+			}
+			msg := err.Error()
+			for _, want := range []string{tc.wantName, "INTER-2013"} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("error %q missing %q", msg, want)
+				}
+			}
+		})
+	}
+}
+
+// TestSearchEventInputToRequest_BotInfoForwarded is the post-SDK-update
+// contract the wiring will satisfy. Skipped today; remove t.Skip once
+// the BotInfo*(...) request builders are available on the Go SDK and add
+// per-field assertions that they reach the SDK request.
+func TestSearchEventInputToRequest_BotInfoForwarded(t *testing.T) {
+	t.Skip("blocked on INTER-2013: SDK does not yet expose bot_info_* request builders")
+}
+
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.
+	// Skip bot_info_* fields: they're surfaced ahead of SDK support and would
+	// trip the INTER-2013 stub error. _BotInfoNotYetWired covers them.
 	input := schema.SearchEventInput{}
 	inputVal := reflect.ValueOf(&input).Elem()
 	for i := 0; i < inputVal.NumField(); i++ {
+		fieldName := inputVal.Type().Field(i).Name
+		if strings.HasPrefix(fieldName, "BotInfo") {
+			continue
+		}
 		field := inputVal.Field(i)
-		setNonZero(t, inputVal.Type().Field(i).Name, field)
+		setNonZero(t, fieldName, field)
 	}
 
 	// Should not panic and should not error on the (RFC3339) start/end strings
