@@ -19,6 +19,81 @@
       ],
       "type": "string"
     },
+    "bot_info": {
+      "description": "Filter events by their Bot Info result, specifically:\n  - `all` - events where any kind of bot was detected.\n  - `none` - events where no bot was detected.\n",
+      "enum": [
+        "all",
+        "none"
+      ],
+      "type": "string"
+    },
+    "bot_info_category": {
+      "description": "Filter events by their Bot Info Category.\n\nMultiple categories can be provided using the repeated keys syntax. For example, `bot_info_category=ai_agent\u0026bot_info_category=ai_assistant`, will match events with a Bot Info Category of `ai_agent` or `ai_assistant`. Other notations like comma-separated or bracket notation are not supported.\n",
+      "items": {
+        "description": "The type and purpose of the bot.\n",
+        "enum": [
+          "advertising_and_marketing",
+          "aggregator",
+          "ai_agent",
+          "ai_assistant",
+          "ai_browser",
+          "ai_crawler",
+          "ai_search",
+          "browser_automation",
+          "ecommerce",
+          "monitoring_and_analytics",
+          "other",
+          "scraping",
+          "security",
+          "search_engine_crawler",
+          "search_engine_optimization",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_confidence": {
+      "description": "Filter events by their Bot Info Confidence.\n\nMultiple confidences can be provided using the repeated keys syntax. For example, `bot_info_confidence=high\u0026bot_info_confidence=medium`, will match events with a Bot Info Confidence of `high` or `medium`. Other notations like comma-separated or bracket notation are not supported.\n",
+      "items": {
+        "description": "Confidence level of the bot identification.",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_identity": {
+      "description": "Filter events by their Bot Info Identity type.\n\nMultiple identity types can be provided using the repeated keys syntax. For example, `bot_info_identity=verified\u0026bot_info_identity=signed`, will match events with a Bot Info Identity of `verified` or `signed`. Other notations like comma-separated or bracket notation are not supported.\n",
+      "items": {
+        "description": "The verification status of the bot's identity:\n * `verified` - well-known bot with publicly verifiable identity, directed by the bot provider.\n * `signed` - bot that signs its platform via Web Bot Auth, directed by the bot provider's customers.\n * `spoofed` - bot that claims a public identity but fails verification.\n * `unknown` - bot that does not publish a verifiable identity.\n",
+        "enum": [
+          "verified",
+          "signed",
+          "spoofed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_name": {
+      "description": "Filter events by their Bot Info Name. The name must match exactly, partial or wildcard matching is not supported.\n\nMultiple Names can be provided using the repeated keys syntax. For example, `bot_info_name=ChatGPT%20Agent\u0026bot_info_name=Bedrock%20AgentCore`, will match events with a Bot Info Name of `ChatGPT Agent` or `Bedrock AgentCore`. Other notations like comma-separated or bracket notation are not supported.\n",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bot_info_provider": {
+      "description": "Filter events by their Bot Info Provider. The provider must match exactly, partial or wildcard matching is not supported.\n\nMultiple Providers can be provided using the repeated keys syntax. For example, `bot_info_provider=OpenAI\u0026bot_info_provider=AWS`, will match events with a Bot Info Provider of `OpenAI` or `AWS`. Other notations like comma-separated or bracket notation are not supported.\n",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "bundle_id": {
       "description": "Filter events by the Bundle ID (iOS) associated with the event.\n",
       "type": "string"
@@ -111,7 +186,7 @@
       "type": "string"
     },
     "pagination_key": {
-      "description": "Use `pagination_key` to get the next page of results.\n\nWhen more results are available (e.g., you requested up to 100 results for your query using `limit`, but there are more than 100 events total matching your request), the `pagination_key` field is added to the response. The pagination key is an arbitrary string that should not be interpreted in any way and should be passed as-is. In the following request, use that value in the `pagination_key` parameter to get the next page of results:\n\n1. First request, returning most recent 200 events: `GET api-base-url/events?limit=100`\n2. Use `response.pagination_key` to get the next page of results: `GET api-base-url/events?limit=100\u0026pagination_key=1740815825085`\n",
+      "description": "Use `pagination_key` to get the next page of results.\n\nWhen more results are available (e.g., you requested up to 100 results for your query using `limit`, but there are more than 100 events total matching your request), the `pagination_key` field is added to the response. The pagination key is an arbitrary string that should not be interpreted in any way and should be passed as-is. In the following request, use that value in the `pagination_key` parameter to get the next page of results:\n\n1. First request, returning most recent 100 events: `GET api-base-url/events?limit=100`\n2. Use `response.pagination_key` to get the next page of results: `GET api-base-url/events?limit=100\u0026pagination_key=1740815825085`\n",
       "type": "string"
     },
     "privacy_settings": {
@@ -127,11 +202,11 @@
       "type": "boolean"
     },
     "rare_device": {
-      "description": "Filter events by Device Rarity detection result.\n\u003e Note: When using this parameter, only events with the `rare_device` property set to `true` or `false` are returned. Events without a Device Rarity Smart Signal result are left out of the response.\n",
+      "description": "Filter events by Device Rarity detection result.\n\u003e Note: When using this parameter, only events with the `rare_device` property set to `true` or `false` are returned. Events without a Device Rarity Smart Signal result are left out of the response.\n\n\u003e This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
       "type": "boolean"
     },
     "rare_device_percentile_bucket": {
-      "description": "Filter events by Device Rarity percentile bucket.\n`\u003cp95` - device configuration is in the bottom 95% (most common).\n`p95-p99` - device is in the 95th to 99th percentile.\n`p99-p99.5` - device is in the 99th to 99.5th percentile.\n`p99.5-p99.9` - device is in the 99.5th to 99.9th percentile.\n`p99.9+` - device is in the top 0.1% (rarest).\n`not_seen` - device configuration has never been observed before.\n",
+      "description": "Filter events by Device Rarity percentile bucket.\n`\u003cp95` - device configuration is in the bottom 95% (most common).\n`p95-p99` - device is in the 95th to 99th percentile.\n`p99-p99.5` - device is in the 99th to 99.5th percentile.\n`p99.5-p99.9` - device is in the 99.5th to 99.9th percentile.\n`p99.9+` - device is in the top 0.1% (rarest).\n`not_seen` - device configuration has never been observed before.\n\n\u003e This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
       "enum": [
         "\u003cp95",
         "p95-p99",
@@ -143,7 +218,7 @@
       "type": "string"
     },
     "reverse": {
-      "description": "When `true`, sort events oldest first (ascending timestamp order). Default is newest first (descending timestamp order).\n",
+      "description": "When `true`, sort events oldest first (ascending timestamp order). Defaults to `false` (newest first, descending timestamp order).\n",
       "type": "boolean"
     },
     "root_apps": {

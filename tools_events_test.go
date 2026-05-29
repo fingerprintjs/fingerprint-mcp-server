@@ -138,6 +138,65 @@ func TestSearchEventInputToRequest_InvalidEndReturnsError(t *testing.T) {
 	}
 }
 
+// TestSearchEventInputToRequest_BotInfoForwarded verifies each bot_info_* filter
+// reaches the SDK request via its builder, with the plain-string MCP values
+// converted to the SDK's string-typed enums.
+func TestSearchEventInputToRequest_BotInfoForwarded(t *testing.T) {
+	cases := []struct {
+		name  string
+		input schema.SearchEventInput
+		want  fingerprint.SearchEventRequest
+	}{
+		{
+			"bot_info",
+			schema.SearchEventInput{BotInfo: "all"},
+			fingerprint.NewSearchEventsRequest().BotInfo(fingerprint.SearchEventsBotInfoAll),
+		},
+		{
+			"bot_info_category",
+			schema.SearchEventInput{BotInfoCategory: []string{"ai_agent", "ai_assistant"}},
+			fingerprint.NewSearchEventsRequest().BotInfoCategory([]fingerprint.BotInfoCategory{
+				fingerprint.BotInfoCategoryAIAgent, fingerprint.BotInfoCategoryAIAssistant,
+			}),
+		},
+		{
+			"bot_info_identity",
+			schema.SearchEventInput{BotInfoIdentity: []string{"verified", "signed"}},
+			fingerprint.NewSearchEventsRequest().BotInfoIdentity([]fingerprint.BotInfoIdentity{
+				fingerprint.BotInfoIdentityVerified, fingerprint.BotInfoIdentitySigned,
+			}),
+		},
+		{
+			"bot_info_confidence",
+			schema.SearchEventInput{BotInfoConfidence: []string{"high", "medium"}},
+			fingerprint.NewSearchEventsRequest().BotInfoConfidence([]fingerprint.BotInfoConfidence{
+				fingerprint.BotInfoConfidenceHigh, fingerprint.BotInfoConfidenceMedium,
+			}),
+		},
+		{
+			"bot_info_provider",
+			schema.SearchEventInput{BotInfoProvider: []string{"OpenAI", "AWS"}},
+			fingerprint.NewSearchEventsRequest().BotInfoProvider([]string{"OpenAI", "AWS"}),
+		},
+		{
+			"bot_info_name",
+			schema.SearchEventInput{BotInfoName: []string{"ChatGPT Agent"}},
+			fingerprint.NewSearchEventsRequest().BotInfoName([]string{"ChatGPT Agent"}),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := schema.SearchEventInputToRequest(&tc.input)
+			if err != nil {
+				t.Fatalf("SearchEventInputToRequest: %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("request mismatch\n got: %#v\nwant: %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.

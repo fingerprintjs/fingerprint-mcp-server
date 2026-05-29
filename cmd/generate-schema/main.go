@@ -205,6 +205,9 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 		if name == "" {
 			continue
 		}
+		if isAliasParam(param) {
+			continue
+		}
 
 		propSchema := make(map[string]any)
 
@@ -230,6 +233,9 @@ func buildSearchEventsInputSchema(spec map[string]any) (map[string]any, error) {
 					if f, ok := v.(string); ok && isOpenAPIOnlyFormat(f) {
 						continue
 					}
+				}
+				if k == "items" {
+					v = resolveItemsRef(v, schemas)
 				}
 				propSchema[k] = v
 			}
@@ -283,6 +289,44 @@ Always derive timestamps from the current real-world wall-clock time. Do NOT reu
 const rfc3339EndDescription = `Upper bound of the time window (inclusive) as an RFC3339 timestamp. UTC ("YYYY-MM-DDTHH:MM:SSZ") or with timezone offset ("YYYY-MM-DDTHH:MM:SS±hh:mm"); fractional seconds are accepted. Defaults to now. Setting "end" does not change "start"'s default of "7 days ago"; adjust it separately if needed.
 
 Always derive timestamps from the current real-world wall-clock time. Do NOT reuse a year from your training data. Events are typically retained for ~90 days (varies by plan).`
+
+// isAliasParam reports whether a parameter aliases another (e.g. start_date_time
+// aliases start); we surface only the canonical one.
+func isAliasParam(param map[string]any) bool {
+	_, ok := param["x-aliased-parameter-name"]
+	return ok
+}
+
+// resolveItemsRef inlines an array "items" $ref into a cleaned copy of the
+// referenced schema; search_events_input.json has no $defs to resolve it against.
+func resolveItemsRef(items any, schemas map[string]any) any {
+	m, ok := items.(map[string]any)
+	if !ok {
+		return items
+	}
+	ref, ok := m["$ref"].(string)
+	if !ok {
+		return items
+	}
+	refName := extractSchemaName(ref)
+	resolved, ok := schemas[refName].(map[string]any)
+	if !ok {
+		return items
+	}
+	out := make(map[string]any, len(resolved))
+	for k, v := range resolved {
+		if shouldRemoveField(k) {
+			continue
+		}
+		if k == "format" {
+			if f, ok := v.(string); ok && isOpenAPIOnlyFormat(f) {
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
 
 // collectRefs recursively collects all schemas referenced from the given root schema name.
 func collectRefs(allSchemas map[string]any, name string, collected map[string]any) {
@@ -508,6 +552,9 @@ func generateSearchEventInputStruct(spec map[string]any) (string, error) {
 		if name == "" {
 			continue
 		}
+		if isAliasParam(param) {
+			continue
+		}
 
 		schema, _ := param["schema"].(map[string]any)
 		typeName, _ := schema["type"].(string)
@@ -596,6 +643,10 @@ func openAPITypeToGo(typeName, format string, required bool, schema map[string]a
 		}
 	case "array":
 		items, _ := schema["items"].(map[string]any)
+		// enum components are referenced via $ref; surface them as []string.
+		if _, ok := items["$ref"]; ok {
+			return "[]string"
+		}
 		itemType, _ := items["type"].(string)
 		switch itemType {
 		case "string":

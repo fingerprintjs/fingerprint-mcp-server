@@ -216,6 +216,24 @@ func goTypeToJSONSchemaType(t reflect.Type) string {
 // Returns an error if start/end are not valid RFC3339.
 func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEventRequest, error) {
 	req := fingerprint.NewSearchEventsRequest()
+	if s, ok := input.BotInfo.(string); ok {
+		req = req.BotInfo(fingerprint.SearchEventsBotInfo(s))
+	}
+	if len(input.BotInfoCategory) > 0 {
+		req = req.BotInfoCategory(toEnumSlice[fingerprint.BotInfoCategory](input.BotInfoCategory))
+	}
+	if len(input.BotInfoIdentity) > 0 {
+		req = req.BotInfoIdentity(toEnumSlice[fingerprint.BotInfoIdentity](input.BotInfoIdentity))
+	}
+	if len(input.BotInfoConfidence) > 0 {
+		req = req.BotInfoConfidence(toEnumSlice[fingerprint.BotInfoConfidence](input.BotInfoConfidence))
+	}
+	if len(input.BotInfoProvider) > 0 {
+		req = req.BotInfoProvider(input.BotInfoProvider)
+	}
+	if len(input.BotInfoName) > 0 {
+		req = req.BotInfoName(input.BotInfoName)
+	}
 	if input.Limit != nil {
 		req = req.Limit(*input.Limit)
 	}
@@ -342,6 +360,14 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 		req = req.TorNode(*input.TorNode)
 	}
 	return req, nil
+}
+
+func toEnumSlice[T ~string](in []string) []T {
+	out := make([]T, len(in))
+	for i, v := range in {
+		out[i] = T(v)
+	}
+	return out
 }
 
 func MustInferSchema[T any]() json.RawMessage {
