@@ -12,7 +12,7 @@
     "description": "Extended bot information.",
     "properties": {
       "category": {
-        "description": "The type and purpose of the bot.",
+        "description": "The type and purpose of the bot.\n",
         "type": "string"
       },
       "confidence": {
@@ -25,7 +25,7 @@
         "type": "string"
       },
       "identity": {
-        "description": "The verification status of the bot's identity:\n * `verified` - well-known bot with publicly verifiable identity, directed by the bot provider.\n * `signed` - bot that signs its platform via Web Bot Auth, directed by the bot provider’s customers.\n * `spoofed` - bot that claims a public identity but fails verification.\n * `unknown` - bot that does not publish a verifiable identity.\n",
+        "description": "The verification status of the bot's identity:\n * `verified` - well-known bot with publicly verifiable identity, directed by the bot provider.\n * `signed` - bot that signs its platform via Web Bot Auth, directed by the bot provider's customers.\n * `spoofed` - bot that claims a public identity but fails verification.\n * `unknown` - bot that does not publish a verifiable identity.\n",
         "enum": [
           "verified",
           "signed",
@@ -144,7 +144,7 @@
     "type": "string"
   },
   "DeveloperTools": {
-    "description": "`true` if the browser is Chrome with DevTools open or Firefox with Developer Tools open, `false` otherwise.\n",
+    "description": "`true` if the browser has DevTools open (Chrome, Firefox) or the Android/iOS device has Developer Tools enabled, `false` otherwise.\n",
     "type": "boolean"
   },
   "DeviceManufacturer": {
@@ -269,6 +269,9 @@
       },
       "jailbroken": {
         "$ref": "#/$defs/Jailbroken"
+      },
+      "labels": {
+        "$ref": "#/$defs/Labels"
       },
       "linked_id": {
         "$ref": "#/$defs/LinkedId"
@@ -754,18 +757,19 @@
   },
   "IdentificationConfidence": {
     "additionalProperties": true,
+    "description": "The confidence score represents the probability of a false-positive identification. To learn more, visit [Confidence Score](https://docs.fingerprint.com/docs/identification-accuracy-and-confidence#confidence-score). Please note that the confidence score is not yet supported for [High Recall ID](https://docs.fingerprint.com/docs/supplementary-identifiers-highrecall). ",
     "properties": {
       "comment": {
         "type": "string"
       },
       "score": {
-        "description": "The confidence score is a floating-point number between 0 and 1 that represents the probability of accurate identification.",
+        "description": "A floating-point number between 0 and 1 that represents the probability of a false-positive identification. For High Recall ID, this value is 0. ",
         "maximum": 1,
         "minimum": 0,
         "type": "number"
       },
       "version": {
-        "description": "The version name of the method used to calculate the Confidence score. This field is only present for customers who opted in to an alternative calculation method.",
+        "description": "The version name of the method used to calculate the confidence score. For High Recall ID, this value is \"Not Supported\". ",
         "type": "string"
       }
     },
@@ -779,7 +783,7 @@
     "type": "boolean"
   },
   "IncrementalIdentificationStatus": {
-    "description": "Only included for requests using incremental identification.\n- `partially_completed` - the event did not receive the second \"update\" request.\n- `completed` - the event was updated and all information is available.\n",
+    "description": "Only included for requests using incremental identification.\n- `partially_completed` - Indicates this event corresponds to a 'minimal' request. Smart Signals, even if included in your plan, are not computed; hence, their values must be ignored.\n- `completed` - Indicates this event corresponds to a 'complete' request. Smart Signals, if included in your plan, are computed; hence, their values are valid and relevant. \n",
     "enum": [
       "partially_completed",
       "completed"
@@ -824,6 +828,29 @@
   "Jailbroken": {
     "description": "iOS specific jailbreak detection. There are 2 values: \n* `true` - Jailbreak detected.\n* `false` - No signs of jailbreak or the client is not iOS.\n",
     "type": "boolean"
+  },
+  "Labels": {
+    "description": "Each label returns a prediction (true or false) for a specific use case (label field) based on a machine learning score. The machine learning score is determined by a model trained on customer data for that use case. This field is in the beta phase and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "items": {
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "ml_score": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "prediction": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "type": "array"
   },
   "Languages": {
     "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs. Available for both browsers and iOS devices\n",
@@ -983,7 +1010,7 @@
     "type": "object"
   },
   "ProxyMLScore": {
-    "description": "Machine learning–based proxy score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `proxy` detection result\n",
+    "description": "Machine learning–based proxy score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `proxy` detection result. This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
     "maximum": 1,
     "minimum": 0,
     "type": "number"
@@ -1402,7 +1429,7 @@
     "type": "boolean"
   },
   "VirtualMachineMLScore": {
-    "description": "Machine learning–based virtual machine score,  represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `virtual_machine` detection result\n",
+    "description": "Machine learning–based virtual machine score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `virtual_machine` detection result. This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
     "maximum": 1,
     "minimum": 0,
     "type": "number"

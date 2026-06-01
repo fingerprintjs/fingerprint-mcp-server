@@ -21,6 +21,12 @@ type SearchEventInput struct {
 	VisitorId                       *string `json:"visitor_id,omitempty"`
 	HighRecallId                    *string `json:"high_recall_id,omitempty"`
 	Bot                             any `json:"bot,omitempty"`
+	BotInfo                         any `json:"bot_info,omitempty"`
+	BotInfoCategory                 []string `json:"bot_info_category,omitempty"`
+	BotInfoIdentity                 []string `json:"bot_info_identity,omitempty"`
+	BotInfoConfidence               []string `json:"bot_info_confidence,omitempty"`
+	BotInfoProvider                 []string `json:"bot_info_provider,omitempty"`
+	BotInfoName                     []string `json:"bot_info_name,omitempty"`
 	IpAddress                       *string `json:"ip_address,omitempty"`
 	Asn                             *string `json:"asn,omitempty"`
 	LinkedId                        *string `json:"linked_id,omitempty"`
