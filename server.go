@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fingerprintjs/fingerprint-mcp-server/analytics"
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -36,6 +37,7 @@ type App struct {
 
 type opts struct {
 	l       *slog.Logger
+	emitter analytics.Emitter
 	version string
 	appName string
 }
@@ -47,11 +49,28 @@ func (o opts) logger() *slog.Logger {
 	return slog.Default()
 }
 
+func (o opts) analyticsEmitter() analytics.Emitter {
+	if o.emitter != nil {
+		return o.emitter
+	}
+	return analytics.Noop()
+}
+
 type OptFunc func(o *opts)
 
 func WithLogger(logger *slog.Logger) OptFunc {
 	return func(o *opts) {
 		o.l = logger
+	}
+}
+
+// WithAnalytics injects a custom analytics emitter. When omitted, the server
+// uses a no-op emitter and ships zero telemetry. Tests inject a recording
+// fake; the hosted fingerprint-mcp-server-public binary injects an Amplitude
+// emitter.
+func WithAnalytics(e analytics.Emitter) OptFunc {
+	return func(o *opts) {
+		o.emitter = e
 	}
 }
 
@@ -76,6 +95,15 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 	if err != nil {
 		return err
 	}
+
+	// Register the emitter drain immediately after New() succeeds so the
+	// background worker is closed on every exit path — including JWKS or
+	// registration errors below — instead of leaking until process exit.
+	defer func() {
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = opts.analyticsEmitter().Close(drainCtx)
+	}()
 
 	opts.logger().Info("starting fingerprint-mcp-server", "version", app.version)
 
@@ -112,6 +140,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 	if appName == "" {
 		appName = "fingerprint-mcp-server"
 	}
+
 	a := &App{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -390,63 +419,127 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		method string,
 		req mcp.Request,
 	) (mcp.Result, error) {
-		var toolName string
-		var clientInfo string
+		var toolName, resourceURI, promptName, clientInfo string
+		var clientName, clientVersion string
 		if ctr, ok := req.(*mcp.CallToolRequest); ok {
 			toolName = ctr.Params.Name
 		}
+		// resource_uri is logged as-is. Today the only templated URI is
+		// fingerprint://events/{event_id}, where event_id is an opaque
+		// server-issued identifier; the rest are static fingerprint://schemas/*
+		// URIs. Re-evaluate redaction here if a future resource embeds
+		// customer-identifying data directly in the URI.
+		if rr, ok := req.(*mcp.ReadResourceRequest); ok {
+			resourceURI = rr.Params.URI
+		}
+		if pr, ok := req.(*mcp.GetPromptRequest); ok {
+			promptName = pr.Params.Name
+		}
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
-			ci := ir.Params.ClientInfo
-			if ci != nil {
+			if ci := ir.Params.ClientInfo; ci != nil {
+				clientName = ci.Name
+				clientVersion = ci.Version
 				clientInfo = ci.Name + "/" + ci.Version
 			}
 		}
-		extra := req.GetExtra()
-		var subID string // subID is optional
-		if extra != nil && extra.TokenInfo != nil {
-			subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
+		// subID is optional. GetExtra() returns nil in stdio mode (no auth
+		// pipeline runs) and TokenInfo is nil in private-mode HTTP without a
+		// configured AuthToken. Guard both dereferences so the middleware
+		// doesn't panic in those paths.
+		var subID string
+		if extra := req.GetExtra(); extra != nil {
+			if extra.TokenInfo != nil {
+				subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
+			}
 		}
 
-		a.opts.logger().Debug("MCP method started",
-			"method", method,
-			"tool_name", toolName,
-			"has_params", req.GetParams() != nil,
-			"sub_id", subID,
-			"client_info", clientInfo,
-		)
+		// baseAttrs returns the common attributes for every log line. Optional
+		// fields are only included when populated to avoid empty-string noise on
+		// methods that don't carry them (e.g. resource_uri on tools/call).
+		baseAttrs := func() []any {
+			attrs := []any{"method", method}
+			if toolName != "" {
+				attrs = append(attrs, "tool_name", toolName)
+			}
+			if resourceURI != "" {
+				attrs = append(attrs, "resource_uri", resourceURI)
+			}
+			if promptName != "" {
+				attrs = append(attrs, "prompt_name", promptName)
+			}
+			if subID != "" {
+				attrs = append(attrs, "sub_id", subID)
+			}
+			if clientInfo != "" {
+				attrs = append(attrs, "client_info", clientInfo)
+			}
+			return attrs
+		}
+
+		a.opts.logger().Debug("MCP method started", append(baseAttrs(), "has_params", req.GetParams() != nil)...)
 
 		start := time.Now()
 		result, err := next(ctx, method, req)
 		duration := time.Since(start)
 
+		isError := false
+		errorClass := ""
+		var errorMessage string
 		if err != nil {
-			a.opts.logger().Error("MCP method failed",
-				"method", method,
-				"tool_name", toolName,
+			errorClass = "internal"
+			errorMessage = err.Error()
+			a.opts.logger().Error("MCP method failed", append(baseAttrs(),
 				"duration_ms", duration.Milliseconds(),
 				"err", err,
-				"sub_id", subID,
-				"client_info", clientInfo,
-			)
+			)...)
 		} else {
-			isError := false
 			var ctrError error
 			if ctr, ok := result.(*mcp.CallToolResult); ok {
 				isError = ctr.IsError
 				ctrError = ctr.GetError()
+				if isError {
+					errorClass = "tool_error"
+					// Tool errors carry a human-readable message in the
+					// first TextContent of the result. Pull that into
+					// error_message so analytics shows what failed, not
+					// just that it failed.
+					if ctrError != nil {
+						errorMessage = ctrError.Error()
+					} else {
+						for _, c := range ctr.Content {
+							if tc, ok := c.(*mcp.TextContent); ok {
+								errorMessage = tc.Text
+								break
+							}
+						}
+					}
+				}
 			}
-
-			a.opts.logger().Debug("MCP method completed",
-				"method", method,
-				"tool_name", toolName,
+			a.opts.logger().Debug("MCP method completed", append(baseAttrs(),
 				"duration_ms", duration.Milliseconds(),
 				"has_result", result != nil,
 				"is_error", isError,
 				"err", ctrError,
-				"sub_id", subID,
-				"client_info", clientInfo,
-			)
+			)...)
 		}
+
+		a.emitAnalytics(analyticsInputs{
+			req:           req,
+			method:        method,
+			subID:         subID,
+			toolName:      toolName,
+			resourceURI:   resourceURI,
+			promptName:    promptName,
+			clientName:    clientName,
+			clientVersion: clientVersion,
+			duration:      duration,
+			isError:       isError,
+			err:           err,
+			errorClass:    errorClass,
+			errorMessage:  errorMessage,
+			result:        result,
+		})
+
 		return result, err
 	}
 }

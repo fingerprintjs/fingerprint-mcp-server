@@ -66,6 +66,25 @@ The server can be configured via CLI flags or environment variables:
 | `--oauth-auth-server`  | `OAUTH_AUTH_SERVER`              |                                  | URL of the OAuth authorization server                                    |
 | `--jwks-url`           | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
 
+## Telemetry
+
+This binary ships with telemetry disabled. There is no built-in analytics
+backend and the default emitter is a no-op, so running the OSS binary
+sends nothing to anyone.
+
+The server exposes a hook (`analytics.Emitter` in the `analytics`
+package) that fires on each MCP method. Embedders who want product
+analytics register their own emitter by importing this package as a
+library and calling `WithAnalytics(emitter)` when constructing the
+server. Fingerprint's hosted build (`mcp.fpjs.io`) does this with an
+Amplitude emitter, but that implementation lives in the private managed
+repo, not here.
+
+If you build your own emitter, the event shape is in
+`analytics/analytics.go`. The middleware fires one `mcp_method_called`
+event per MCP method, gated on a non-empty `subscription_id` (so pre-auth
+methods and the private-mode auth path stay silent regardless).
+
 ## Usage
 
 ### Private mode vs. Public mode
