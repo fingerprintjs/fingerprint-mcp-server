@@ -160,6 +160,24 @@ docker run -d --rm \
 
 ## MCP Client Configuration
 
+### Hosted endpoint (managed)
+
+The quickest way to connect is the managed instance at `https://mcp.fpjs.io/mcp`, which runs in public mode and authenticates each user via OAuth2.
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=Fingerprint&config=eyJ1cmwiOiJodHRwczovL21jcC5mcGpzLmlvL21jcCIsInRyYW5zcG9ydCI6InN0cmVhbWFibGUtaHR0cCJ9)
+
+```json
+{
+  "mcpServers": {
+    "fingerprint": {
+      "url": "https://mcp.fpjs.io/mcp"
+    }
+  }
+}
+```
+
+### Self-hosted
+
 Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_config.json`):
 
 **Stdio Transport:**
