@@ -170,6 +170,7 @@ The quickest way to connect is the managed instance at `https://mcp.fpjs.io/mcp`
 {
   "mcpServers": {
     "fingerprint": {
+      "type": "http",
       "url": "https://mcp.fpjs.io/mcp"
     }
   }
