@@ -1,0 +1,54 @@
+name: Publish to MCP Registry
+
+# Run deliberately as the final step of a release, NOT on every merge.
+# The library here auto-tags v0.1.X on every push to main, but the registry
+# entry describes the deployed remote (https://mcp.fpjs.io/mcp), whose
+# lifecycle is the wrapper/platform-stack deploy. So publishing is manual:
+# dispatch this after a prod rollout is confirmed healthy. Pass `version`
+# to set the registry version explicitly, or leave blank to use the latest tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.1.34). Defaults to the latest git tag."
+        required: false
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for OIDC auth against io.github.fingerprintjs/*
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          VERSION="${VERSION#v}" # registry expects plain semver, strip any leading v
+          echo "Publishing version $VERSION"
+          jq --arg v "$VERSION" '.version = $v' server.json > server.tmp && mv server.tmp server.json
+
+      - name: Install mcp-publisher
+        env:
+          # Pinned release + checksum: avoids running an unverified binary from a moving `latest` URL.
+          MCP_PUBLISHER_VERSION: v1.7.9
+          MCP_PUBLISHER_SHA256: ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac
+        run: |
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server to MCP Registry
+        run: ./mcp-publisher publish
