@@ -143,7 +143,9 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 			return nil, nil, err
 		}
 
-		if input.Limit == nil || *input.Limit == 0 {
+		if input.Limit == nil {
+			input.Limit = utils.Ptr(int32(10))
+		} else if *input.Limit < 1 {
 			return nil, nil, fmt.Errorf("limit must be greater than zero")
 		}
 

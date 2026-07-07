@@ -859,6 +859,34 @@ func TestSearchEvents_ZeroLimit(t *testing.T) {
 	}
 }
 
+// Confirms an omitted limit succeeds and defaults to 10 on the upstream query,
+// matching the documented schema default.
+func TestSearchEvents_DefaultLimit(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+	})
+
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	result := mustCallTool(t, session, "search_events", map[string]any{})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	q, err := url.ParseQuery(fpAPI.lastRequest().RawQuery)
+	if err != nil {
+		t.Fatalf("parse upstream query: %v", err)
+	}
+	if got := q.Get("limit"); got != "10" {
+		t.Errorf("upstream limit param = %q, want %q", got, "10")
+	}
+}
+
 func TestGetEvent_PublicMode_InvalidRegion(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
