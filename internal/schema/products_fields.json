@@ -5,6 +5,7 @@
   "browser_details",
   "cloned_app",
   "developer_tools",
+  "device",
   "emulator",
   "factory_reset_timestamp",
   "frida",
@@ -18,6 +19,8 @@
   "labels",
   "location_spoofing",
   "mitm_attack",
+  "os",
+  "os_version",
   "privacy_settings",
   "proximity",
   "proxy",
@@ -42,6 +45,7 @@
   "vpn",
   "vpn_confidence",
   "vpn_methods",
+  "vpn_ml_score",
   "vpn_origin_country",
   "vpn_origin_timezone"
 ]
