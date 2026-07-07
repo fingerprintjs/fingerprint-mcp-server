@@ -197,6 +197,21 @@ func TestSearchEventInputToRequest_BotInfoForwarded(t *testing.T) {
 	}
 }
 
+// Verifies the source filter reaches the SDK request as the string-typed enum.
+func TestSearchEventInputToRequest_SourceForwarded(t *testing.T) {
+	input := schema.SearchEventInput{Source: []string{"edge"}}
+	want := fingerprint.NewSearchEventsRequest().Source([]fingerprint.SearchEventsSource{
+		fingerprint.SearchEventsSourceEdge,
+	})
+	got, err := schema.SearchEventInputToRequest(&input)
+	if err != nil {
+		t.Fatalf("SearchEventInputToRequest: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("request mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.

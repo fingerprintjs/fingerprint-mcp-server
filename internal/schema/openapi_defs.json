@@ -1,11 +1,30 @@
 {
   "Architecture": {
     "description": "Integer representing the CPU architecture exposed by the browser.",
+    "examples": [
+      127
+    ],
     "type": "integer"
   },
   "Audio": {
     "description": "AudioContext fingerprint or negative status when unavailable. The negative statuses can be:\n- -1: A permanent status for those browsers which are known to always suspend audio context\n- -2: A permanent status for browsers that don't support the signal\n- -3: A temporary status that means that an unexpected timeout has happened\n",
+    "examples": [
+      124.04347745512496
+    ],
     "type": "number"
+  },
+  "BatteryLevel": {
+    "description": "Battery charge level as a percentage (0-100). Available only for Android and iOS devices.",
+    "examples": [
+      75
+    ],
+    "maximum": 100,
+    "minimum": 0,
+    "type": "integer"
+  },
+  "BatteryLowPowerMode": {
+    "description": "Whether the device's low power mode is enabled. Available only for Android and iOS devices.",
+    "type": "boolean"
   },
   "BotInfo": {
     "additionalProperties": true,
@@ -36,14 +55,30 @@
       },
       "name": {
         "description": "The specific name or identifier of the bot.",
+        "examples": [
+          "ClaudeBot",
+          "Browserbase Agent",
+          "Googlebot",
+          "GPTBot",
+          "ChatGPT-User"
+        ],
         "type": "string"
       },
       "provider": {
         "description": "The organization or company operating the bot.",
+        "examples": [
+          "Anthropic",
+          "Browserbase",
+          "Google",
+          "OpenAI"
+        ],
         "type": "string"
       },
       "provider_url": {
         "description": "The URL of the bot provider's website.",
+        "examples": [
+          "https://fingerprint.com"
+        ],
         "type": "string"
       }
     },
@@ -67,27 +102,48 @@
   },
   "BotType": {
     "description": "Additional classification of the bot type if detected.\n",
+    "examples": [
+      "fingerprint_agent"
+    ],
     "type": "string"
   },
   "BrowserDetails": {
     "additionalProperties": true,
     "properties": {
       "browser_full_version": {
+        "examples": [
+          "74.0.3729"
+        ],
         "type": "string"
       },
       "browser_major_version": {
+        "examples": [
+          "74"
+        ],
         "type": "string"
       },
       "browser_name": {
+        "examples": [
+          "Chrome"
+        ],
         "type": "string"
       },
       "device": {
+        "examples": [
+          "Other"
+        ],
         "type": "string"
       },
       "os": {
+        "examples": [
+          "Windows"
+        ],
         "type": "string"
       },
       "os_version": {
+        "examples": [
+          "7"
+        ],
         "type": "string"
       }
     },
@@ -102,7 +158,10 @@
     "type": "object"
   },
   "BundleId": {
-    "description": "Bundle Id of the iOS application integrated with the Fingerprint SDK for the event. For example: `com.foo.app`\n",
+    "description": "Bundle Id of the iOS application integrated with the Fingerprint SDK for the event.\n",
+    "examples": [
+      "com.foo.app"
+    ],
     "type": "string"
   },
   "Canvas": {
@@ -111,20 +170,30 @@
     "properties": {
       "geometry": {
         "description": "Hash of geometry rendering output or `unsupported` markers.",
+        "examples": [
+          "db3c1462576a399a03ae93d0ab9eb5c4"
+        ],
         "type": "string"
       },
       "text": {
         "description": "Hash of text rendering output or `unsupported` markers.",
+        "examples": [
+          "70c3d3f7eb4408dc37a6bf8af1c51029"
+        ],
         "type": "string"
       },
       "winding": {
         "type": "boolean"
       }
     },
+    "required": [],
     "type": "object"
   },
   "ClientReferrer": {
-    "description": "Client Referrer field corresponds to the `document.referrer` field gathered during an identification request. The value is an empty string if the user navigated to the page directly (not through a link, but, for example, by using a bookmark) For example: `https://example.com/blog/my-article`\n",
+    "description": "Client Referrer field corresponds to the `document.referrer` field gathered during an identification request. The value is an empty string if the user navigated to the page directly (not through a link, but, for example, by using a bookmark).\n",
+    "examples": [
+      "https://example.com/blog/my-article"
+    ],
     "type": "string"
   },
   "ClonedApp": {
@@ -133,6 +202,9 @@
   },
   "ColorDepth": {
     "description": "Screen color depth in bits.",
+    "examples": [
+      24
+    ],
     "type": "integer"
   },
   "CookiesEnabled": {
@@ -141,23 +213,44 @@
   },
   "DateTimeLocale": {
     "description": "Locale derived from the Intl.DateTimeFormat API. Negative values indicate known error states. The negative statuses can be:\n- \"-1\": A permanent status for browsers that don't support Intl API.\n- \"-2\": A permanent status for browsers that don't supportDateTimeFormat constructor.\n- \"-3\": A permanent status for browsers in which DateTimeFormat locale is undefined or null.\n",
+    "examples": [
+      "en-US"
+    ],
     "type": "string"
   },
   "DeveloperTools": {
     "description": "`true` if the browser has DevTools open (Chrome, Firefox) or the Android/iOS device has Developer Tools enabled, `false` otherwise.\n",
     "type": "boolean"
   },
+  "Device": {
+    "description": "Device model or family extracted from the user agent string. On web, this field is also present inside `browser_details`.\n",
+    "examples": [
+      "Generic Smartphone",
+      "Desktop",
+      "iPhone"
+    ],
+    "type": "string"
+  },
   "DeviceManufacturer": {
     "description": "Device manufacturer string. Available only for Android and iOS devices.",
+    "examples": [
+      "Apple"
+    ],
     "type": "string"
   },
   "DeviceMemory": {
-    "description": "Rounded amount of RAM (in gigabytes) reported by the browser.",
+    "description": "Rounded amount of RAM in gigabytes.",
+    "examples": [
+      8
+    ],
     "minimum": 0,
     "type": "integer"
   },
   "DeviceModel": {
     "description": "Device model string. Available only for Android and iOS devices.",
+    "examples": [
+      "iPhone 15 Pro"
+    ],
     "type": "string"
   },
   "Emoji": {
@@ -165,34 +258,62 @@
     "description": "Bounding box metrics describing how the emoji glyph renders.",
     "properties": {
       "bottom": {
+        "examples": [
+          32
+        ],
         "type": "number"
       },
       "font": {
         "description": "Font family reported by the browser when drawing the emoji.",
+        "examples": [
+          "Times"
+        ],
         "type": "string"
       },
       "height": {
+        "examples": [
+          18
+        ],
         "type": "number"
       },
       "left": {
+        "examples": [
+          8
+        ],
         "type": "number"
       },
       "right": {
+        "examples": [
+          1608
+        ],
         "type": "number"
       },
       "top": {
+        "examples": [
+          14
+        ],
         "type": "number"
       },
       "width": {
+        "examples": [
+          1600
+        ],
         "type": "number"
       },
       "x": {
+        "examples": [
+          8
+        ],
         "type": "number"
       },
       "y": {
+        "examples": [
+          14
+        ],
         "type": "number"
       }
     },
+    "required": [],
     "type": "object"
   },
   "Emulator": {
@@ -200,7 +321,10 @@
     "type": "boolean"
   },
   "EnvironmentId": {
-    "description": "Environment Id of the event. For example: `ae_47abaca3db2c7c43`\n",
+    "description": "Environment Id of the event.",
+    "examples": [
+      "ae_47abaca3db2c7c43"
+    ],
     "type": "string"
   },
   "Event": {
@@ -230,6 +354,9 @@
       },
       "developer_tools": {
         "$ref": "#/$defs/DeveloperTools"
+      },
+      "device": {
+        "$ref": "#/$defs/Device"
       },
       "emulator": {
         "$ref": "#/$defs/Emulator"
@@ -281,6 +408,12 @@
       },
       "mitm_attack": {
         "$ref": "#/$defs/MitMAttack"
+      },
+      "os": {
+        "$ref": "#/$defs/Os"
+      },
+      "os_version": {
+        "$ref": "#/$defs/OsVersion"
       },
       "package_name": {
         "$ref": "#/$defs/PackageName"
@@ -378,6 +511,9 @@
       "vpn_methods": {
         "$ref": "#/$defs/VpnMethods"
       },
+      "vpn_ml_score": {
+        "$ref": "#/$defs/VpnMLScore"
+      },
       "vpn_origin_country": {
         "$ref": "#/$defs/VpnOriginCountry"
       },
@@ -392,7 +528,10 @@
     "type": "object"
   },
   "EventId": {
-    "description": "Unique identifier of the user's request. The first portion of the event_id is a unix epoch milliseconds timestamp For example: `1758130560902.8tRtrH`\n",
+    "description": "Unique identifier of the user's request. The first portion of the event_id is a unix epoch milliseconds timestamp.\n",
+    "examples": [
+      "1708102555327.NLOjmg"
+    ],
     "type": "string"
   },
   "EventRuleAction": {
@@ -496,10 +635,16 @@
       },
       "pagination_key": {
         "description": "Use this value in the `pagination_key` parameter to request the next page of search results.",
+        "examples": [
+          "S9rgMMUb4z3X5t5pr_tSgoSZlmyF0O8X7kCV2m981-iY1LmRTjraa1rTk3L-hQExnDWCi0RA-zAIjaVSTNO2AN2eqQWgzT0RjbieMxRfSdkM-HmOhdOgdQvYfPG3vqU1DJKh4Q"
+        ],
         "type": "string"
       },
       "total_hits": {
         "description": "This value represents the total number of events matching the search query, up to the limit provided in the `total_hits` query parameter. Only present if the `total_hits` query parameter was provided.",
+        "examples": [
+          100
+        ],
         "type": "integer"
       }
     },
@@ -510,10 +655,16 @@
   },
   "FactoryReset": {
     "description": "The time of the most recent factory reset that happened on the **mobile device** is expressed as Unix epoch time. When a factory reset cannot be detected on the mobile device or when the request is initiated from a browser,  this field will correspond to the *epoch* time (i.e 1 Jan 1970 UTC) as a value of 0. See [Factory Reset Detection](https://docs.fingerprint.com/docs/smart-signals-reference#factory-reset-detection) to learn more about this Smart Signal.\n",
+    "examples": [
+      1708102555327
+    ],
     "type": "integer"
   },
   "FontHash": {
     "description": "Unique identifier for the user’s installed fonts.",
+    "examples": [
+      "e9f96f6c0e2c0b3a7a8b1d2c3e4f5a6b"
+    ],
     "type": "string"
   },
   "FontPreferences": {
@@ -521,32 +672,65 @@
     "description": "Baseline measurement of canonical fonts rendered on the device. Numeric width metrics, in CSS pixels, for the canonical fonts collected by the agent.\n",
     "properties": {
       "apple": {
+        "examples": [
+          147.5625
+        ],
         "type": "number"
       },
       "default": {
+        "examples": [
+          147.5625
+        ],
         "type": "number"
       },
       "min": {
+        "examples": [
+          9.234375
+        ],
         "type": "number"
       },
       "mono": {
+        "examples": [
+          133.0625
+        ],
         "type": "number"
       },
       "sans": {
+        "examples": [
+          144.015625
+        ],
         "type": "number"
       },
       "serif": {
+        "examples": [
+          147.5625
+        ],
         "type": "number"
       },
       "system": {
+        "examples": [
+          146.09375
+        ],
         "type": "number"
       }
     },
+    "required": [],
     "type": "object"
   },
   "Fonts": {
     "description": "List of fonts detected on the device.",
+    "examples": [
+      [
+        "Arial Unicode MS",
+        "Gill Sans",
+        "Helvetica Neue",
+        "Menlo"
+      ]
+    ],
     "items": {
+      "examples": [
+        "Arial Unicode MS"
+      ],
       "type": "string"
     },
     "type": "array"
@@ -560,48 +744,81 @@
     "properties": {
       "accuracy_radius": {
         "description": "The IP address is likely to be within this radius (in km) of the specified location.",
+        "examples": [
+          20
+        ],
         "minimum": 0,
         "type": "integer"
       },
       "city_name": {
+        "examples": [
+          "Prague"
+        ],
         "type": "string"
       },
       "continent_code": {
+        "examples": [
+          "EU"
+        ],
         "maxLength": 2,
         "minLength": 2,
         "type": "string"
       },
       "continent_name": {
+        "examples": [
+          "Europe"
+        ],
         "type": "string"
       },
       "country_code": {
+        "examples": [
+          "CZ"
+        ],
         "maxLength": 2,
         "minLength": 2,
         "type": "string"
       },
       "country_name": {
+        "examples": [
+          "Czechia"
+        ],
         "type": "string"
       },
       "latitude": {
+        "examples": [
+          50.05
+        ],
         "maximum": 90,
         "minimum": -90,
         "type": "number"
       },
       "longitude": {
+        "examples": [
+          14.4
+        ],
         "maximum": 180,
         "minimum": -180,
         "type": "number"
       },
       "postal_code": {
+        "examples": [
+          "150 00"
+        ],
         "type": "string"
       },
       "subdivisions": {
         "items": {
           "properties": {
             "iso_code": {
+              "examples": [
+                "10"
+              ],
               "type": "string"
             },
             "name": {
+              "examples": [
+                "Hlavni mesto Praha"
+              ],
               "type": "string"
             }
           },
@@ -614,13 +831,20 @@
         "type": "array"
       },
       "timezone": {
+        "examples": [
+          "Europe/Prague"
+        ],
         "type": "string"
       }
     },
+    "required": [],
     "type": "object"
   },
   "HardwareConcurrency": {
     "description": "Number of logical CPU cores reported by the browser.",
+    "examples": [
+      10
+    ],
     "type": "integer"
   },
   "HighActivity": {
@@ -643,6 +867,7 @@
         "type": "boolean"
       }
     },
+    "required": [],
     "type": "object"
   },
   "IPInfo": {
@@ -656,31 +881,61 @@
         "$ref": "#/$defs/IPInfoV6"
       }
     },
+    "required": [],
     "type": "object"
   },
   "IPInfoV4": {
     "additionalProperties": true,
     "properties": {
       "address": {
+        "examples": [
+          "94.142.239.124"
+        ],
         "format": "ipv4",
         "type": "string"
       },
       "asn": {
+        "examples": [
+          "396982",
+          "16509",
+          "701"
+        ],
         "type": "string"
       },
       "asn_name": {
+        "examples": [
+          "Google LLC",
+          "Amazon.com, Inc.",
+          "Verizon Business"
+        ],
         "type": "string"
       },
       "asn_network": {
+        "examples": [
+          "34.160.0.0/12",
+          "3.208.0.0/12",
+          "173.56.0.0/16"
+        ],
         "type": "string"
       },
       "asn_type": {
+        "examples": [
+          "hosting",
+          "isp",
+          "business",
+          "education"
+        ],
         "type": "string"
       },
       "datacenter_name": {
+        "examples": [
+          "Google Cloud",
+          "Amazon AWS"
+        ],
         "type": "string"
       },
       "datacenter_result": {
+        "description": "When true, the request originated from a datacenter.",
         "type": "boolean"
       },
       "geolocation": {
@@ -696,25 +951,54 @@
     "additionalProperties": true,
     "properties": {
       "address": {
+        "examples": [
+          "2001:db8:3333:4444:5555:6666:7777:8888"
+        ],
         "format": "ipv6",
         "type": "string"
       },
       "asn": {
+        "examples": [
+          "396982",
+          "16509",
+          "701"
+        ],
         "type": "string"
       },
       "asn_name": {
+        "examples": [
+          "Google LLC",
+          "Amazon.com, Inc.",
+          "Verizon Business"
+        ],
         "type": "string"
       },
       "asn_network": {
+        "examples": [
+          "2001:4860:4801:10::/64",
+          "2600:1f00::/24",
+          "2001:4868:800::/40"
+        ],
         "type": "string"
       },
       "asn_type": {
+        "examples": [
+          "hosting",
+          "isp",
+          "business",
+          "education"
+        ],
         "type": "string"
       },
       "datacenter_name": {
+        "examples": [
+          "Google Cloud",
+          "Amazon AWS"
+        ],
         "type": "string"
       },
       "datacenter_result": {
+        "description": "When true, the request originated from a datacenter.",
         "type": "boolean"
       },
       "geolocation": {
@@ -734,10 +1018,16 @@
       },
       "first_seen_at": {
         "description": "Unix epoch time milliseconds timestamp indicating the time at which this visitor ID was first seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "examples": [
+          1708102555327
+        ],
         "type": "integer"
       },
       "last_seen_at": {
         "description": "Unix epoch time milliseconds timestamp indicating the time at which this visitor ID was last seen. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "examples": [
+          1708102555327
+        ],
         "type": "integer"
       },
       "visitor_found": {
@@ -746,6 +1036,9 @@
       },
       "visitor_id": {
         "description": "String of 20 characters that uniquely identifies the visitor's browser or mobile device.",
+        "examples": [
+          "Ibk1527CUFmcnjLwIs4A9"
+        ],
         "type": "string"
       }
     },
@@ -760,16 +1053,25 @@
     "description": "The confidence score represents the probability of a false-positive identification. To learn more, visit [Confidence Score](https://docs.fingerprint.com/docs/identification-accuracy-and-confidence#confidence-score). Please note that the confidence score is not yet supported for [High Recall ID](https://docs.fingerprint.com/docs/supplementary-identifiers-highrecall). ",
     "properties": {
       "comment": {
+        "examples": [
+          "Low confidence due to bot signals"
+        ],
         "type": "string"
       },
       "score": {
         "description": "A floating-point number between 0 and 1 that represents the probability of a false-positive identification. For High Recall ID, this value is 0. ",
+        "examples": [
+          0.97
+        ],
         "maximum": 1,
         "minimum": 0,
         "type": "number"
       },
       "version": {
         "description": "The version name of the method used to calculate the confidence score. For High Recall ID, this value is \"Not Supported\". ",
+        "examples": [
+          "1.1"
+        ],
         "type": "string"
       }
     },
@@ -798,31 +1100,48 @@
     "additionalProperties": true,
     "properties": {
       "name": {
-        "description": "The name of the specific integration, e.g. \"fingerprint-pro-react\".",
+        "description": "The name of the specific integration.",
+        "examples": [
+          "fingerprint-pro-react"
+        ],
         "type": "string"
       },
       "subintegration": {
         "properties": {
           "name": {
-            "description": "The name of the specific subintegration, e.g. \"preact\".",
+            "description": "The name of the specific subintegration.",
+            "examples": [
+              "preact"
+            ],
             "type": "string"
           },
           "version": {
-            "description": "The version of the specific subintegration, e.g. \"10.21.0\".",
+            "description": "The version of the specific subintegration.",
+            "examples": [
+              "10.21.0"
+            ],
             "type": "string"
           }
         },
+        "required": [],
         "type": "object"
       },
       "version": {
-        "description": "The version of the specific integration, e.g. \"3.11.10\".",
+        "description": "The version of the specific integration.",
+        "examples": [
+          "3.11.10"
+        ],
         "type": "string"
       }
     },
+    "required": [],
     "type": "object"
   },
   "IpAddress": {
     "description": "IP address of the requesting browser or bot.",
+    "examples": [
+      "61.127.217.15"
+    ],
     "type": "string"
   },
   "Jailbroken": {
@@ -834,9 +1153,15 @@
     "items": {
       "properties": {
         "label": {
+          "examples": [
+            "automation_tool"
+          ],
           "type": "string"
         },
         "ml_score": {
+          "examples": [
+            0.95
+          ],
           "maximum": 1,
           "minimum": 0,
           "type": "number"
@@ -853,9 +1178,12 @@
     "type": "array"
   },
   "Languages": {
-    "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs. Available for both browsers and iOS devices\n",
+    "description": "Navigator languages reported by the agent including fallbacks. Each inner array represents ordered language preferences reported by different APIs. Available for browsers, iOS, and Android devices.\n",
     "items": {
       "items": {
+        "examples": [
+          "en-US"
+        ],
         "type": "string"
       },
       "type": "array"
@@ -864,6 +1192,9 @@
   },
   "LinkedId": {
     "description": "A customer-provided id that was sent with the request.",
+    "examples": [
+      "somelinkedId"
+    ],
     "type": "string"
   },
   "LocalStorage": {
@@ -876,22 +1207,52 @@
   },
   "Math": {
     "description": "Hash of Math APIs used for entropy collection.",
+    "examples": [
+      "5f030fa7d2e5f9f757bfaf81642eb1a6"
+    ],
     "type": "string"
   },
   "MitMAttack": {
     "description": "* `true` - When requests made from your users' mobile devices to Fingerprint servers have been intercepted and potentially modified. \n* `false` - Otherwise or when the request originated from a browser.\nSee [MitM Attack Detection](https://docs.fingerprint.com/docs/smart-signals-reference#mitm-attack-detection) to learn more about this Smart Signal.\n",
     "type": "boolean"
   },
+  "Os": {
+    "description": "Operating system family extracted from the user agent string. On web, this field is also present inside `browser_details`.\n",
+    "examples": [
+      "Windows",
+      "iOS",
+      "Android"
+    ],
+    "type": "string"
+  },
+  "OsVersion": {
+    "description": "Operating system version string extracted from the user agent string. On web, this field is also present inside `browser_details`.\n",
+    "examples": [
+      "17.4",
+      "14",
+      "10"
+    ],
+    "type": "string"
+  },
   "Oscpu": {
     "description": "Navigator `oscpu` string.",
+    "examples": [
+      "Windows NT 6.1; Win64; x64"
+    ],
     "type": "string"
   },
   "PackageName": {
-    "description": "Package name of the Android application integrated with the Fingerprint SDK for the event. For example: `com.foo.app`\n",
+    "description": "Package name of the Android application integrated with the Fingerprint SDK for the event.\n",
+    "examples": [
+      "com.foo.app"
+    ],
     "type": "string"
   },
   "Platform": {
     "description": "Navigator platform string.",
+    "examples": [
+      "MacIntel"
+    ],
     "type": "string"
   },
   "Plugins": {
@@ -899,26 +1260,42 @@
     "items": {
       "properties": {
         "description": {
+          "examples": [
+            "Portable Document Format"
+          ],
           "type": "string"
         },
         "mimeTypes": {
           "items": {
             "properties": {
               "description": {
+                "examples": [
+                  "Portable Document Format"
+                ],
                 "type": "string"
               },
               "suffixes": {
+                "examples": [
+                  "pdf"
+                ],
                 "type": "string"
               },
               "type": {
+                "examples": [
+                  "application/pdf"
+                ],
                 "type": "string"
               }
             },
+            "required": [],
             "type": "object"
           },
           "type": "array"
         },
         "name": {
+          "examples": [
+            "PDF Viewer"
+          ],
           "type": "string"
         }
       },
@@ -939,12 +1316,18 @@
     "properties": {
       "confidence": {
         "description": "A value between `0` and `1` representing the likelihood that the true device location lies within the mapped proximity zone.\n  * Scores closer to `1` indicate high confidence that the location is inside the mapped proximity zone.\n  * Scores closer to `0` indicate lower confidence, suggesting the true location may fall in an adjacent zone.\n",
+        "examples": [
+          0.95
+        ],
         "maximum": 1,
         "minimum": 0,
         "type": "number"
       },
       "id": {
         "description": "A stable privacy-preserving identifier for a given proximity zone.\n",
+        "examples": [
+          "w1aTfd4MCvl"
+        ],
         "type": "string"
       },
       "precision_radius": {
@@ -989,17 +1372,24 @@
     "properties": {
       "last_seen_at": {
         "description": "Unix millisecond timestamp with hourly resolution of when this IP was last seen as a proxy\n",
+        "examples": [
+          1708102555327
+        ],
         "type": "integer"
       },
       "provider": {
         "description": "String representing the last proxy service provider detected when this\nIP was synced. An IP can be shared by multiple service providers.\n",
+        "examples": [
+          "Massive"
+        ],
         "type": "string"
       },
       "proxy_type": {
-        "description": "Residential proxies use real user IP addresses to appear as legitimate traffic, \nwhile data center proxies are public proxies hosted in data centers\n",
+        "description": "Proxy type:\n * `residential` - proxies that route through residential and telecom IP addresses to appear as legitimate traffic\n * `data_center` - proxies which route through data centers\n * `unknown` - reported when a proxy is detected solely by the ML model and the IP sources did not determine a specific type\n",
         "enum": [
           "residential",
-          "data_center"
+          "data_center",
+          "unknown"
         ],
         "type": "string"
       }
@@ -1011,6 +1401,9 @@
   },
   "ProxyMLScore": {
     "description": "Machine learning–based proxy score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `proxy` detection result. This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "examples": [
+      0.2
+    ],
     "maximum": 1,
     "minimum": 0,
     "type": "number"
@@ -1040,6 +1433,12 @@
       },
       "audio": {
         "$ref": "#/$defs/Audio"
+      },
+      "battery_level": {
+        "$ref": "#/$defs/BatteryLevel"
+      },
+      "battery_low_power_mode": {
+        "$ref": "#/$defs/BatteryLowPowerMode"
       },
       "canvas": {
         "$ref": "#/$defs/Canvas"
@@ -1123,6 +1522,7 @@
         "$ref": "#/$defs/WebGlExtensions"
       }
     },
+    "required": [],
     "type": "object"
   },
   "Replayed": {
@@ -1143,6 +1543,9 @@
       "remove": {
         "description": "The list of headers to remove.",
         "items": {
+          "examples": [
+            "X-Forwarded-For"
+          ],
           "type": "string"
         },
         "type": "array"
@@ -1155,6 +1558,7 @@
         "type": "array"
       }
     },
+    "required": [],
     "type": "object"
   },
   "RootApps": {
@@ -1163,6 +1567,9 @@
   },
   "RuleActionBody": {
     "description": "The response body to send to the client.",
+    "examples": [
+      "{\"title\":\"Forbidden\"}"
+    ],
     "type": "string"
   },
   "RuleActionHeaderField": {
@@ -1170,10 +1577,16 @@
     "properties": {
       "name": {
         "description": "The header field name.",
+        "examples": [
+          "Content-Type"
+        ],
         "type": "string"
       },
       "value": {
         "description": "The value of the header field.",
+        "examples": [
+          "application/json"
+        ],
         "type": "string"
       }
     },
@@ -1193,14 +1606,23 @@
   },
   "RuleExpression": {
     "description": "The expression of the rule that matched the identification event.",
+    "examples": [
+      "bot in [\"bad\"] || incognito"
+    ],
     "type": "string"
   },
   "RuleId": {
     "description": "The ID of the rule that matched the identification event.",
+    "examples": [
+      "r_uE0af8497PFAOD"
+    ],
     "type": "string"
   },
   "RulesetId": {
     "description": "The ID of the evaluated ruleset.",
+    "examples": [
+      "rs_b1k1blhqpOX3kU"
+    ],
     "type": "string"
   },
   "SDK": {
@@ -1224,7 +1646,10 @@
         "type": "string"
       },
       "version": {
-        "description": "Version string of the SDK used for the identification request. For example: `\"3.12.1\"`\n",
+        "description": "Version string of the SDK used for the identification request.",
+        "examples": [
+          "3.11.10"
+        ],
         "type": "string"
       }
     },
@@ -1237,6 +1662,9 @@
   "ScreenResolution": {
     "description": "Current screen resolution. Available for both browsers and iOS devices",
     "items": {
+      "examples": [
+        1920
+      ],
       "type": "integer"
     },
     "maxItems": 2,
@@ -1253,6 +1681,9 @@
   },
   "StatusCode": {
     "description": "A valid HTTP status code.",
+    "examples": [
+      200
+    ],
     "type": "integer"
   },
   "SupplementaryIDHighRecall": {
@@ -1264,10 +1695,16 @@
       },
       "first_seen_at": {
         "description": "Unix epoch timestamp (in milliseconds) indicating when the browser was first identified. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "examples": [
+          1778086556130
+        ],
         "type": "integer"
       },
       "last_seen_at": {
         "description": "Unix epoch timestamp (in milliseconds) corresponding to the most recent visit by this browser. example: `1758069706642` - Corresponding to Wed Sep 17 2025 00:41:46 GMT+0000\n",
+        "examples": [
+          1778604975494
+        ],
         "type": "integer"
       },
       "visitor_found": {
@@ -1276,6 +1713,9 @@
       },
       "visitor_id": {
         "description": "The High Recall identifier for the visitor's browser. It is an alphanumeric string with a maximum length of 25 characters.",
+        "examples": [
+          "0jnGMkPYXX37DqVa4ZIO3f_hr"
+        ],
         "type": "string"
       }
     },
@@ -1291,11 +1731,15 @@
   },
   "SuspectScore": {
     "description": "Suspect Score is an easy way to integrate Smart Signals into your fraud protection work flow.  It is a weighted representation of all Smart Signals present in the payload that helps identify suspicious activity. The value range is [0; S] where S is sum of all Smart Signals weights.  See more details here: https://docs.fingerprint.com/docs/suspect-score\n",
+    "examples": [
+      8
+    ],
     "type": "integer"
   },
   "Tags": {
     "additionalProperties": true,
     "description": "A customer-provided value or an object that was sent with the identification request or updated later.",
+    "required": [],
     "type": "object"
   },
   "Tampering": {
@@ -1316,6 +1760,9 @@
     "properties": {
       "anomaly_score": {
         "description": "The output of this model is captured as anomaly_score, a statistical score indicating how rare the visitor's browser signature is compared to the overall population. Values close to 1 signify highly anomalous browsers and we consider anything above the threshold of 0.5 to be actionable (the result field conveniently captures that fact).\n",
+        "examples": [
+          0.5
+        ],
         "maximum": 1,
         "minimum": 0,
         "type": "number"
@@ -1325,24 +1772,37 @@
         "type": "boolean"
       }
     },
+    "required": [],
     "type": "object"
   },
   "TamperingMlScore": {
     "description": "The output of this model is captured as tampering_ml_score, a number indicating how likely an event is coming from an anti detect browser. Values close to 1 signify higher confidence and we consider anything above the threshold of 0.8 to be actionable (the result and anti_detect_browser fields conveniently captures that fact)\n",
+    "examples": [
+      0.5
+    ],
     "maximum": 1,
     "minimum": 0,
     "type": "number"
   },
   "Timestamp": {
     "description": "Timestamp of the event with millisecond precision in Unix time.",
+    "examples": [
+      1708102555327
+    ],
     "type": "integer"
   },
   "Timezone": {
     "description": "Timezone identifier detected on the client.",
+    "examples": [
+      "America/Sao_Paulo"
+    ],
     "type": "string"
   },
   "TimezoneOffset": {
     "description": "UTC offset in \"±HH:MM\" format derived from the detected IANA timezone.",
+    "examples": [
+      "+02:00"
+    ],
     "type": "string"
   },
   "TouchSupport": {
@@ -1350,6 +1810,9 @@
     "description": "Browser-reported touch capabilities.",
     "properties": {
       "max_touch_points": {
+        "examples": [
+          0
+        ],
         "type": "integer"
       },
       "touch_event": {
@@ -1359,14 +1822,21 @@
         "type": "boolean"
       }
     },
+    "required": [],
     "type": "object"
   },
   "Url": {
-    "description": "Page URL from which the request was sent. For example `https://example.com/`\n",
+    "description": "Page URL from which the request was sent.",
+    "examples": [
+      "https://www.example.com/login"
+    ],
     "type": "string"
   },
   "UserAgent": {
-    "description": "User Agent of the client, for example: `Mozilla/5.0 (Windows NT 6.1; Win64; x64) ....`\n",
+    "description": "User Agent of the client.",
+    "examples": [
+      "Mozilla/5.0 (Windows NT 6.1; Win64; x64) ...."
+    ],
     "type": "string"
   },
   "Velocity": {
@@ -1395,6 +1865,7 @@
         "$ref": "#/$defs/VelocityData"
       }
     },
+    "required": [],
     "type": "object"
   },
   "VelocityData": {
@@ -1403,14 +1874,23 @@
     "properties": {
       "1_hour": {
         "description": "Count for the last 1 hour of velocity data, from the time of the event.\n",
+        "examples": [
+          5
+        ],
         "type": "integer"
       },
       "24_hours": {
         "description": "The `24_hours` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`, `distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted if the number of `events` for the visitor Id in the last 24 hours (`events.['24_hours']`) is higher than 20.000.\n",
+        "examples": [
+          5
+        ],
         "type": "integer"
       },
       "5_minutes": {
         "description": "Count for the last 5 minutes of velocity data, from the time of the event.\n",
+        "examples": [
+          1
+        ],
         "type": "integer"
       }
     },
@@ -1422,6 +1902,9 @@
   },
   "Vendor": {
     "description": "Navigator vendor string.",
+    "examples": [
+      "Google Inc."
+    ],
     "type": "string"
   },
   "VirtualMachine": {
@@ -1430,6 +1913,9 @@
   },
   "VirtualMachineMLScore": {
     "description": "Machine learning–based virtual machine score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `virtual_machine` detection result. This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "examples": [
+      0.5
+    ],
     "maximum": 1,
     "minimum": 0,
     "type": "number"
@@ -1447,11 +1933,24 @@
     ],
     "type": "string"
   },
+  "VpnMLScore": {
+    "description": "Machine learning–based VPN score, represented as a floating-point value between 0 and 1 (inclusive), with up to three decimal places of precision. A higher score means a higher confidence in the positive `vpn` detection result. This Smart Signal is currently in beta and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
+    "examples": [
+      0.2
+    ],
+    "maximum": 1,
+    "minimum": 0,
+    "type": "number"
+  },
   "VpnMethods": {
     "additionalProperties": true,
     "properties": {
       "auxiliary_mobile": {
         "description": "This method applies to mobile devices only. Indicates the result of additional methods used to detect a VPN in mobile devices.",
+        "type": "boolean"
+      },
+      "ml_prediction": {
+        "description": "`true` if the request came from a device running a VPN, `false` otherwise.  \n",
         "type": "boolean"
       },
       "os_mismatch": {
@@ -1471,14 +1970,21 @@
         "type": "boolean"
       }
     },
+    "required": [],
     "type": "object"
   },
   "VpnOriginCountry": {
     "description": "Country of the request (only for Android SDK version \u003e= 2.4.0, ISO 3166 format or unknown).\n",
+    "examples": [
+      "DE"
+    ],
     "type": "string"
   },
   "VpnOriginTimezone": {
     "description": "Local timezone which is used in timezone_mismatch method.\n",
+    "examples": [
+      "Europe/Berlin"
+    ],
     "type": "string"
   },
   "WebGlBasics": {
@@ -1486,24 +1992,43 @@
     "description": "Render and vendor strings reported by the WebGL context.",
     "properties": {
       "renderer": {
+        "examples": [
+          "WebKit WebGL"
+        ],
         "type": "string"
       },
       "renderer_unmasked": {
+        "examples": [
+          "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+        ],
         "type": "string"
       },
       "shading_language_version": {
+        "examples": [
+          "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+        ],
         "type": "string"
       },
       "vendor": {
+        "examples": [
+          "WebKit"
+        ],
         "type": "string"
       },
       "vendor_unmasked": {
+        "examples": [
+          "Google Inc. (Apple)"
+        ],
         "type": "string"
       },
       "version": {
+        "examples": [
+          "WebGL 1.0 (OpenGL ES 2.0 Chromium)"
+        ],
         "type": "string"
       }
     },
+    "required": [],
     "type": "object"
   },
   "WebGlExtensions": {
@@ -1511,27 +2036,46 @@
     "description": "Hashes of WebGL context attributes and extension support.",
     "properties": {
       "context_attributes": {
+        "examples": [
+          "6b1ed336830d2bc96442a9d76373252a"
+        ],
         "type": "string"
       },
       "extension_parameters": {
+        "examples": [
+          "86a8abb36f0cb30b5946dec0c761d042"
+        ],
         "type": "string"
       },
       "extensions": {
+        "examples": [
+          "57233d7b10f89fcd1ff95e3837ccd72d"
+        ],
         "type": "string"
       },
       "parameters": {
+        "examples": [
+          "ea118c48e308bc4b0677118bbb3019ec"
+        ],
         "type": "string"
       },
       "shader_precisions": {
+        "examples": [
+          "f223dfbcd580cf142da156d93790eb83"
+        ],
         "type": "string"
       },
       "unsupported_extensions": {
         "items": {
+          "examples": [
+            "WEBGL_compressed_texture_s3tc_srgb"
+          ],
           "type": "string"
         },
         "type": "array"
       }
     },
+    "required": [],
     "type": "object"
   }
 }

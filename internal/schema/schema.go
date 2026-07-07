@@ -359,6 +359,9 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 	if input.TorNode != nil {
 		req = req.TorNode(*input.TorNode)
 	}
+	if len(input.Source) > 0 {
+		req = req.Source(toEnumSlice[fingerprint.SearchEventsSource](input.Source))
+	}
 	return req, nil
 }
 
