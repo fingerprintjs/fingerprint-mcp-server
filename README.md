@@ -223,10 +223,11 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. Write tools (create/update/delete) are hidden when `--read-only` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` needs no key and is always available. Write tools (create/update/delete) are hidden when `--read-only` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
+| `get_current_time`   | Return the current date/time in UTC (and an optional IANA timezone) |
 | `get_event`          | Retrieve a specific identification event by ID                      |
 | `search_events`      | Search events with filters (visitor, IP, smart signals, time range) |
 | `list_environments`  | List workspace environments with pagination                         |

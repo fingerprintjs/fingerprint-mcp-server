@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -46,8 +47,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 11 {
-		t.Errorf("expected 11 tools, got %d: %v", len(names), names)
+	if len(names) != 12 {
+		t.Errorf("expected 12 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -69,7 +70,7 @@ func TestListTools_PrivateMode_ServerKeyOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_event", "search_events"}
+	expected := []string{"get_current_time", "get_event", "search_events"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -98,6 +99,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 
 	names := toolNames(result)
 	expected := []string{
+		"get_current_time",
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
 	}
@@ -134,7 +136,7 @@ func TestListTools_PrivateMode_ReadOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -230,8 +232,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 11 {
-		t.Errorf("expected 11 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 12 {
+		t.Errorf("expected 12 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -247,8 +249,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 11 {
-		t.Errorf("expected 11 tools, got %d: %v", len(names), names)
+	if len(names) != 12 {
+		t.Errorf("expected 12 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -274,8 +276,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 11 {
-		t.Errorf("expected 11 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 12 {
+		t.Errorf("expected 12 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -1453,5 +1455,83 @@ func TestAnalytics_PublicMode_NoSubID_EmitsNothing(t *testing.T) {
 
 	if got := len(emitter.snapshot()); got != 0 {
 		t.Errorf("missing sub_id should result in 0 emitted events, got %d", got)
+	}
+}
+
+// --- Group: get_current_time ---
+
+func TestGetCurrentTime_UTC(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "get_current_time", map[string]any{})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out GetCurrentTimeOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	parsed, err := time.Parse(time.RFC3339, out.UTC)
+	if err != nil {
+		t.Fatalf("utc %q is not RFC3339: %v", out.UTC, err)
+	}
+	if parsed.Location() != time.UTC {
+		t.Errorf("expected utc to be in UTC, got %v", parsed.Location())
+	}
+	if delta := time.Since(parsed); delta < 0 || delta > time.Minute {
+		t.Errorf("utc %q is not close to now (delta %v)", out.UTC, delta)
+	}
+	if out.Unix != parsed.Unix() {
+		t.Errorf("unix %d does not match utc %q (%d)", out.Unix, out.UTC, parsed.Unix())
+	}
+	if out.Local != "" || out.Timezone != "" {
+		t.Errorf("expected no local/timezone without a request, got local=%q timezone=%q", out.Local, out.Timezone)
+	}
+}
+
+func TestGetCurrentTime_WithTimezone(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "get_current_time", map[string]any{"timezone": "America/New_York"})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out GetCurrentTimeOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	if out.Timezone != "America/New_York" {
+		t.Errorf("expected timezone echoed as America/New_York, got %q", out.Timezone)
+	}
+	local, err := time.Parse(time.RFC3339, out.Local)
+	if err != nil {
+		t.Fatalf("local %q is not RFC3339: %v", out.Local, err)
+	}
+	// The instant must match utc; only the wall-clock offset differs.
+	utc, err := time.Parse(time.RFC3339, out.UTC)
+	if err != nil {
+		t.Fatalf("utc %q is not RFC3339: %v", out.UTC, err)
+	}
+	if !local.Equal(utc) {
+		t.Errorf("local %q and utc %q are not the same instant", out.Local, out.UTC)
+	}
+}
+
+func TestGetCurrentTime_InvalidTimezone(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "get_current_time", map[string]any{"timezone": "Not/AZone"})
+	if !result.IsError {
+		t.Error("expected error for invalid timezone")
+	}
+	if text := extractTextContent(t, result); !strings.Contains(text, "invalid timezone") {
+		t.Errorf("expected 'invalid timezone' error, got: %s", text)
 	}
 }

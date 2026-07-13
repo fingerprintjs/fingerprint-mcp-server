@@ -546,6 +546,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 
 // readOnlyTools is the set of tools registered when --read-only is used.
 var readOnlyTools = []string{
+	"get_current_time",
 	"get_event",
 	"search_events",
 	"list_environments",
@@ -573,6 +574,11 @@ func (a *App) registerTools(ctx context.Context) error {
 	}
 
 	var candidates []toolEntry
+
+	// get_current_time needs no API key and is available in every mode.
+	candidates = append(candidates,
+		toolEntry{"get_current_time", func() error { return a.registerGetCurrentTimeTool(ctx) }},
+	)
 
 	if a.cfg.PublicMode || (!a.cfg.PublicMode && a.cfg.ServerAPIKey != "") {
 		candidates = append(candidates,
