@@ -33,6 +33,7 @@ func SchemaFromStruct(v any) json.RawMessage {
 
 	properties := make(map[string]any)
 	var required []string
+	usedRefs := make(map[string]bool)
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
@@ -52,6 +53,7 @@ func SchemaFromStruct(v any) json.RawMessage {
 		if ref := field.Tag.Get("ref"); ref != "" {
 			// Use $ref to OpenAPI definition
 			propSchema["$ref"] = "#/$defs/" + ref
+			usedRefs[ref] = true
 		} else {
 			// Infer type from Go type
 			propSchema["type"] = goTypeToJSONSchemaType(field.Type)
@@ -72,7 +74,15 @@ func SchemaFromStruct(v any) json.RawMessage {
 		"type":                 "object",
 		"properties":           properties,
 		"additionalProperties": false,
-		"$defs":                defs,
+	}
+	// Embed only the definitions actually reachable from this struct's $refs
+	// instead of the entire OpenAPI defs blob. A struct with no refs (e.g.
+	// get_current_time) ships no $defs at all; get_event/search_events carry
+	// only the Event/EventSearch closure. This keeps each tool's advertised
+	// schema small enough that size-limited MCP clients don't drop it from
+	// tools/list.
+	if referenced := collectReferencedDefs(usedRefs, defs); len(referenced) > 0 {
+		schema["$defs"] = referenced
 	}
 	if len(required) > 0 {
 		schema["required"] = required
@@ -83,6 +93,60 @@ func SchemaFromStruct(v any) json.RawMessage {
 		panic(fmt.Sprintf("failed to marshal schema: %v", err))
 	}
 	return b
+}
+
+// collectReferencedDefs returns the transitive closure of definitions in
+// allDefs reachable from the seed names, following "#/$defs/<name>" pointers
+// nested inside each definition. Returns an empty map when no refs are used.
+func collectReferencedDefs(seeds map[string]bool, allDefs map[string]any) map[string]any {
+	result := make(map[string]any)
+	queue := make([]string, 0, len(seeds))
+	for name := range seeds {
+		queue = append(queue, name)
+	}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		if _, done := result[name]; done {
+			continue
+		}
+		def, ok := allDefs[name]
+		if !ok {
+			continue
+		}
+		result[name] = def
+		for _, ref := range findDefRefs(def) {
+			if _, done := result[ref]; !done {
+				queue = append(queue, ref)
+			}
+		}
+	}
+	return result
+}
+
+// findDefRefs walks an arbitrary decoded-JSON value and returns every
+// definition name referenced via a "#/$defs/<name>" $ref pointer.
+func findDefRefs(v any) []string {
+	var out []string
+	switch node := v.(type) {
+	case map[string]any:
+		for k, val := range node {
+			if k == "$ref" {
+				if s, ok := val.(string); ok {
+					if name, found := strings.CutPrefix(s, "#/$defs/"); found {
+						out = append(out, name)
+					}
+				}
+				continue
+			}
+			out = append(out, findDefRefs(val)...)
+		}
+	case []any:
+		for _, item := range node {
+			out = append(out, findDefRefs(item)...)
+		}
+	}
+	return out
 }
 
 // PatchProductsEnum injects an "items.enum" constraint into the "products" property
