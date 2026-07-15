@@ -30,6 +30,17 @@ type SearchEventsOutput struct {
 	Events fingerprint.EventSearch `json:"events" ref:"EventSearch"`
 }
 
+// Slim output schemas. The full per-event shape is exposed via the
+// fingerprint://schemas/event resource, so the tool definition advertises only
+// the top-level envelope instead of embedding the ~48KB Event schema (which
+// makes these tools large enough to be dropped by size-capped clients). The
+// handlers still return the complete event payload as structured content; these
+// schemas are permissive (additionalProperties: true) so the full result always
+// validates.
+var getEventOutputSchema = json.RawMessage(`{"type":"object","properties":{"event":{"type":"object","description":"The identification event: visitor_id, browser and device details, geolocation, bot detection, and smart signals. Full shape: fingerprint://schemas/event resource."}},"required":["event"],"additionalProperties":true}`)
+
+var searchEventsOutputSchema = json.RawMessage(`{"type":"object","properties":{"events":{"type":"object","description":"Result set: an events array of matching identification events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource."}},"required":["events"],"additionalProperties":true}`)
+
 func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestExtra) (*fingerprint.Client, error) {
 	var apiKey string
 	if a.cfg.PublicMode {
@@ -90,7 +101,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "get_event",
 		Description:  "Retrieves detailed information about a specific identification event from Fingerprint using its event_id. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
-		OutputSchema: schema.SchemaFromStruct(GetEventOutput{}),
+		OutputSchema: getEventOutputSchema,
 		InputSchema:  schema.PatchProductsEnum(schema.SchemaFromStruct(GetEventInput{})),
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
@@ -128,7 +139,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "search_events",
 		Description:  "Retrieves detailed information about events matching provided criteria. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
-		OutputSchema: schema.SchemaFromStruct(SearchEventsOutput{}),
+		OutputSchema: searchEventsOutputSchema,
 		InputSchema:  schema.PatchProductsEnum(schema.SearchEventsInputSchema),
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
