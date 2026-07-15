@@ -30,16 +30,34 @@ type SearchEventsOutput struct {
 	Events fingerprint.EventSearch `json:"events" ref:"EventSearch"`
 }
 
-// Slim output schemas. The full per-event shape is exposed via the
-// fingerprint://schemas/event resource, so the tool definition advertises only
-// the top-level envelope instead of embedding the ~48KB Event schema (which
-// makes these tools large enough to be dropped by size-capped clients). The
-// handlers still return the complete event payload as structured content; these
-// schemas are permissive (additionalProperties: true) so the full result always
-// validates.
-var getEventOutputSchema = json.RawMessage(`{"type":"object","properties":{"event":{"type":"object","description":"The identification event: visitor_id, browser and device details, geolocation, bot detection, and smart signals. Full shape: fingerprint://schemas/event resource."}},"required":["event"],"additionalProperties":true}`)
+// envelopeOutputSchema builds the slim top-level output schema shared by the
+// event tools: an object with a single required, object-typed key. The full
+// per-event shape is exposed via the fingerprint://schemas/event resource, so
+// the tool definition advertises only this envelope instead of embedding the
+// ~48KB Event schema (which makes these tools large enough to be dropped by
+// size-capped clients). The handlers still return the complete event payload as
+// structured content; the envelope is permissive (additionalProperties: true)
+// so the full result always validates.
+func envelopeOutputSchema(key, description string) json.RawMessage {
+	b, err := json.Marshal(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			key: map[string]any{"type": "object", "description": description},
+		},
+		"required":             []string{key},
+		"additionalProperties": true,
+	})
+	if err != nil {
+		panic(err) // static inputs, cannot fail
+	}
+	return b
+}
 
-var searchEventsOutputSchema = json.RawMessage(`{"type":"object","properties":{"events":{"type":"object","description":"Result set: an events array of matching identification events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource."}},"required":["events"],"additionalProperties":true}`)
+var getEventOutputSchema = envelopeOutputSchema("event",
+	"The identification event: visitor_id, browser and device details, geolocation, bot detection, and smart signals. Full shape: fingerprint://schemas/event resource.")
+
+var searchEventsOutputSchema = envelopeOutputSchema("events",
+	"Result set: an events array of matching identification events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource.")
 
 func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestExtra) (*fingerprint.Client, error) {
 	var apiKey string
