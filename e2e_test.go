@@ -52,6 +52,39 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 }
 
+// TestToolDefinitionSizeUnderLimit guards against re-introducing oversized tool
+// definitions. Some MCP clients silently drop a tool whose definition exceeds a
+// per-tool size budget; in the incident that motivated this guard, search_events
+// (~70KB) was dropped while get_event (~50KB) survived. Keep every tool well
+// under that zone so a future schema change can't silently re-trigger the drop.
+func TestToolDefinitionSizeUnderLimit(t *testing.T) {
+	const maxToolBytes = 40 * 1024
+
+	session := setupStdioServer(t, &config.Config{
+		ServerAPIKey:     "test-server-key",
+		ManagementAPIKey: "test-mgmt-key",
+		Region:           "us",
+	})
+
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+	if len(result.Tools) == 0 {
+		t.Fatal("no tools registered")
+	}
+
+	for _, tool := range result.Tools {
+		b, err := json.Marshal(tool)
+		if err != nil {
+			t.Fatalf("marshal tool %q: %v", tool.Name, err)
+		}
+		if len(b) > maxToolBytes {
+			t.Errorf("tool %q definition is %d bytes, over the %d-byte guard; oversized tool definitions get dropped by some MCP clients, slim its input or output schema", tool.Name, len(b), maxToolBytes)
+		}
+	}
+}
+
 func TestListTools_PrivateMode_ServerKeyOnly(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()

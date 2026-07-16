@@ -510,9 +510,24 @@ func extractTextContent(t *testing.T, result *mcp.CallToolResult) string {
 const cannedGetEventResponse = `{
 	"event_id": "test-event-123",
 	"timestamp": 1700000000000,
+	"url": "https://example.com/login",
+	"ip_address": "192.0.2.1",
+	"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+	"device": "Other",
+	"os": "Mac OS X",
+	"os_version": "10.15.7",
 	"identification": {
 		"visitor_id": "test-visitor-id",
 		"visitor_found": true
+	},
+	"browser_details": {
+		"browser_name": "Chrome",
+		"browser_major_version": "147",
+		"browser_full_version": "147.0.7727",
+		"os": "Mac OS X",
+		"os_version": "10.15.7",
+		"device": "Other",
+		"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 	}
 }`
 
@@ -521,9 +536,24 @@ const cannedSearchEventsResponse = `{
 		{
 			"event_id": "search-event-1",
 			"timestamp": 1700000000000,
+			"url": "https://example.com/checkout",
+			"ip_address": "198.51.100.7",
+			"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+			"device": "Other",
+			"os": "Windows",
+			"os_version": "10",
 			"identification": {
 				"visitor_id": "search-visitor",
 				"visitor_found": true
+			},
+			"browser_details": {
+				"browser_name": "Firefox",
+				"browser_major_version": "142",
+				"browser_full_version": "142.0",
+				"os": "Windows",
+				"os_version": "10",
+				"device": "Other",
+				"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 			}
 		}
 	]
