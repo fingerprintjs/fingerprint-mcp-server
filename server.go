@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/analytics"
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/requestinspect"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -36,10 +38,11 @@ type App struct {
 }
 
 type opts struct {
-	l       *slog.Logger
-	emitter analytics.Emitter
-	version string
-	appName string
+	l         *slog.Logger
+	emitter   analytics.Emitter
+	inspector requestinspect.Inspector
+	version   string
+	appName   string
 }
 
 func (o opts) logger() *slog.Logger {
@@ -74,6 +77,18 @@ func WithAnalytics(e analytics.Emitter) OptFunc {
 	}
 }
 
+// WithRequestInspector injects a hook that receives the HTTP method, the
+// URL, the original headers, and the TCP peer address (IP and port) of
+// every request to the MCP endpoint, before authentication. When omitted,
+// the middleware is not installed at all and requests pay zero overhead. Inspection is fail-open:
+// an Inspect error is logged and the request is served anyway. The hook
+// never fires for the stdio transport, which carries no HTTP metadata.
+func WithRequestInspector(i requestinspect.Inspector) OptFunc {
+	return func(o *opts) {
+		o.inspector = i
+	}
+}
+
 func WithVersion(v string) OptFunc {
 	return func(o *opts) {
 		o.version = v
@@ -103,6 +118,18 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = opts.analyticsEmitter().Close(drainCtx)
+	}()
+
+	// Same story for the request inspector, with its own drain budget so a
+	// hung emitter can't starve it. Nil-guarded because, unlike analytics,
+	// there is no no-op default — when no inspector is configured the
+	// middleware isn't installed at all.
+	defer func() {
+		if ins := opts.inspector; ins != nil {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = ins.Close(drainCtx)
+		}
 	}()
 
 	opts.logger().Info("starting fingerprint-mcp-server", "version", app.version)
@@ -342,7 +369,9 @@ func (a *App) handler() http.Handler {
 		bearerTokenOptions.ResourceMetadataURL = a.cfg.OAuthResource + "/.well-known/oauth-protected-resource"
 	}
 	apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, bearerTokenOptions)
-	mux.Handle("/mcp", apiKeyAuth(mcpHandler))
+	// The inspector wraps outside auth so the embedder also sees requests
+	// that later fail authentication.
+	mux.Handle("/mcp", a.inspectMiddleware(apiKeyAuth(mcpHandler)))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -383,6 +412,49 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 		err = http.ListenAndServe(addr, handler)
 	}
 	return fmt.Errorf("running streamable-http server: %w", err)
+}
+
+// inspectMiddleware hands the request metadata (method, URL, original
+// headers, and TCP peer address) to the configured
+// requestinspect.Inspector. Fail-open: an Inspect error is logged and the
+// request proceeds; it never rejects traffic. When no inspector is
+// configured the handler chain is returned unchanged, so unconfigured
+// builds pay nothing.
+func (a *App) inspectMiddleware(next http.Handler) http.Handler {
+	ins := a.opts.inspector
+	if ins == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, port := splitRemoteAddr(r.RemoteAddr)
+		err := ins.Inspect(r.Context(), requestinspect.Info{
+			Method:     r.Method,
+			URL:        r.URL,
+			Header:     r.Header,
+			RemoteIP:   ip,
+			RemotePort: port,
+		})
+		if err != nil {
+			a.opts.logger().Error("request inspector failed", "err", err, "remote_ip", ip)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// splitRemoteAddr splits an http.Request.RemoteAddr of the form "ip:port"
+// into its parts, stripping IPv6 brackets. If addr has no parseable
+// "ip:port" form (e.g. a unix-socket peer), the raw string is returned as
+// the IP with port 0 so the information is preserved rather than dropped.
+func splitRemoteAddr(addr string) (ip string, port int) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, 0
+	}
+	p, err := strconv.Atoi(portStr)
+	if err != nil {
+		return host, 0
+	}
+	return host, p
 }
 
 func (a *App) corsMiddleware(next http.Handler) http.Handler {
