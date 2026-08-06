@@ -88,24 +88,17 @@ methods and the private-mode auth path stay silent regardless).
 ## Request inspection
 
 Embedders can register a second hook (`requestinspect.Inspector` in the
-`requestinspect` package) that receives the HTTP method, the URL, the
-original HTTP headers, and the TCP peer address (IP and port) of every
-request to the `/mcp` endpoint, before authentication — useful for audit
-logging and traffic analysis. Register it with `WithRequestInspector(inspector)` when
-constructing the server. The OSS binary configures no inspector, so
-nothing is collected and requests pay zero overhead.
+`requestinspect` package) that receives HTTP request metadata — method,
+URL, original headers, and TCP peer address — for every request to the
+`/mcp` endpoint, useful for audit logging and traffic analysis. Register
+it with `WithRequestInspector(inspector)` when constructing the server.
+The OSS binary configures no inspector, so nothing is collected.
 
-The contract is documented in `requestinspect/requestinspect.go`. In
-short: headers and the URL are passed by reference in their original
-form, so treat them as read-only; the remote IP/port are the direct TCP peer (behind a
-load balancer that's the balancer's address — use headers like
-`X-Forwarded-For` for client attribution); inspection is fail-open, so
-an `Inspect` error is logged and the request is served anyway. The hook
-never fires on the stdio transport, which carries no HTTP metadata.
-
-See `requestinspect/example_test.go` for a complete embedder-side
-implementation skeleton (bounded queue, background delivery, header
-redaction, graceful drain).
+The full contract (timing, fail-open behavior, read-only fields, stdio)
+is documented in `requestinspect/requestinspect.go`, the source of truth
+for this hook. See `requestinspect/example_test.go` for a complete
+embedder-side implementation skeleton (bounded queue, background
+delivery, header redaction, graceful drain).
 
 ## Usage
 

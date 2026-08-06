@@ -77,12 +77,11 @@ func WithAnalytics(e analytics.Emitter) OptFunc {
 	}
 }
 
-// WithRequestInspector injects a hook that receives the HTTP method, the
-// URL, the original headers, and the TCP peer address (IP and port) of
-// every request to the MCP endpoint, before authentication. When omitted,
-// the middleware is not installed at all and requests pay zero overhead. Inspection is fail-open:
-// an Inspect error is logged and the request is served anyway. The hook
-// never fires for the stdio transport, which carries no HTTP metadata.
+// WithRequestInspector injects a hook that receives HTTP request
+// metadata (method, URL, headers, peer address) for every request to the
+// MCP endpoint. See the requestinspect package doc for the full contract
+// (timing, fail-open behavior, read-only fields, stdio). When omitted, no
+// metadata is collected.
 func WithRequestInspector(i requestinspect.Inspector) OptFunc {
 	return func(o *opts) {
 		o.inspector = i
@@ -414,27 +413,34 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	return fmt.Errorf("running streamable-http server: %w", err)
 }
 
-// inspectMiddleware hands the request metadata (method, URL, original
-// headers, and TCP peer address) to the configured
-// requestinspect.Inspector. Fail-open: an Inspect error is logged and the
-// request proceeds; it never rejects traffic. When no inspector is
-// configured the handler chain is returned unchanged, so unconfigured
-// builds pay nothing.
+// inspectMiddleware hands request metadata to the configured
+// requestinspect.Inspector; see the requestinspect package doc for the
+// contract (fail-open, read-only Header/URL, never on stdio).
+//
+// a.opts.inspector is read exactly once per request, into a local, and
+// every subsequent use within the request refers to that local rather
+// than re-reading the field. This isn't just style: a middleware built
+// once at startup and then split into a separate nil-check and a later,
+// independent read of the same shared field would leave a window where
+// the field could change (or be observed mid-write, which for a Go
+// interface value can crash even on a "nil-checked" path) between the
+// two reads. Reading once removes that window entirely, regardless of
+// whether anything mutates the field after New() returns today.
 func (a *App) inspectMiddleware(next http.Handler) http.Handler {
-	ins := a.opts.inspector
-	if ins == nil {
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ins := a.opts.inspector
+		if ins == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
 		ip, port := splitRemoteAddr(r.RemoteAddr)
-		err := ins.Inspect(r.Context(), requestinspect.Info{
+		if err := ins.Inspect(r.Context(), requestinspect.Info{
 			Method:     r.Method,
 			URL:        r.URL,
 			Header:     r.Header,
 			RemoteIP:   ip,
 			RemotePort: port,
-		})
-		if err != nil {
+		}); err != nil {
 			a.opts.logger().Error("request inspector failed", "err", err, "remote_ip", ip)
 		}
 		next.ServeHTTP(w, r)
