@@ -12,6 +12,7 @@ import (
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/analytics"
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
+	"github.com/fingerprintjs/fingerprint-mcp-server/requestinspect"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -390,6 +391,77 @@ func (e *recordingEmitter) snapshot() []analytics.Event {
 	return out
 }
 
+// recordingInspector is a requestinspect.Inspector that buffers every
+// Inspect call in-memory so tests can assert on what the middleware passed
+// without coupling to any backend. Headers and URL are cloned at record
+// time per the read-only contract (the live values are owned by the
+// in-flight request).
+// Stand-in for a real inspector (e.g. audit logging in the hosted build)
+// which lives outside this OSS repo. Set err before serving traffic to
+// force every Inspect call to fail.
+type recordingInspector struct {
+	mu         sync.Mutex
+	infos      []requestinspect.Info
+	closeCalls int
+	err        error
+}
+
+func newRecordingInspector() *recordingInspector { return &recordingInspector{} }
+
+func (i *recordingInspector) Inspect(_ context.Context, info requestinspect.Info) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	info.Header = info.Header.Clone()
+	if info.URL != nil {
+		u := *info.URL
+		info.URL = &u
+	}
+	i.infos = append(i.infos, info)
+	return i.err
+}
+
+func (i *recordingInspector) Close(context.Context) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.closeCalls++
+	return nil
+}
+
+func (i *recordingInspector) snapshot() []requestinspect.Info {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	out := make([]requestinspect.Info, len(i.infos))
+	copy(out, i.infos)
+	return out
+}
+
+func (i *recordingInspector) closeCount() int {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.closeCalls
+}
+
+// setupTestServerWithInspector is like setupTestServer but injects a custom
+// requestinspect.Inspector via opts. logger may be nil to use the default;
+// tests that assert on the fail-open log line pass a capture logger.
+func setupTestServerWithInspector(t *testing.T, cfg *config.Config, inspector requestinspect.Inspector, logger *slog.Logger) *httptest.Server {
+	t.Helper()
+
+	app, err := New(cfg, &opts{l: logger, inspector: inspector})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+
+	ts := httptest.NewServer(app.handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
 // setupTestServerWithEmitter is like setupTestServer but injects a custom
 // analytics.Emitter via opts and registers tools/resources/prompts so a single
 // test can exercise every method category that the analytics middleware fires
@@ -430,6 +502,20 @@ func (a *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		req.Header.Set("Authorization", "Bearer "+a.token)
 	}
 	return a.base.RoundTrip(req)
+}
+
+// headerRoundTripper injects a fixed set of extra headers into all requests.
+type headerRoundTripper struct {
+	headers map[string]string
+	base    http.RoundTripper
+}
+
+func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	for k, v := range h.headers {
+		req.Header.Set(k, v)
+	}
+	return h.base.RoundTrip(req)
 }
 
 // tryConnectMCPClient creates an MCP client session with bearer token auth.

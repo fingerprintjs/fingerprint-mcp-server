@@ -85,6 +85,21 @@ If you build your own emitter, the event shape is in
 event per MCP method, gated on a non-empty `subscription_id` (so pre-auth
 methods and the private-mode auth path stay silent regardless).
 
+## Request inspection
+
+Embedders can register a second hook (`requestinspect.Inspector` in the
+`requestinspect` package) that receives HTTP request metadata — method,
+URL, original headers, and TCP peer address — for every request to the
+`/mcp` endpoint, useful for audit logging and traffic analysis. Register
+it with `WithRequestInspector(inspector)` when constructing the server.
+The OSS binary configures no inspector, so nothing is collected.
+
+The full contract (timing, fail-open behavior, read-only fields, stdio)
+is documented in `requestinspect/requestinspect.go`, the source of truth
+for this hook. See `requestinspect/example_test.go` for a complete
+embedder-side implementation skeleton (bounded queue, background
+delivery, header redaction, graceful drain).
+
 ## Usage
 
 ### Private mode vs. Public mode

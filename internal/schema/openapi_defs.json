@@ -1,4 +1,8 @@
 {
+  "ActiveCall": {
+    "description": "Indicates whether the mobile device had an active call (cellular or VoIP) at the time of the request. Available from SDK 2.16.0+ on iOS and Android.\n",
+    "type": "boolean"
+  },
   "Architecture": {
     "description": "Integer representing the CPU architecture exposed by the browser.",
     "examples": [
@@ -13,8 +17,12 @@
     ],
     "type": "number"
   },
+  "BatteryCharging": {
+    "description": "When `true`, the device is currently charging. Available only for web devices on Chromium-based browsers.",
+    "type": "boolean"
+  },
   "BatteryLevel": {
-    "description": "Battery charge level as a percentage (0-100). Available only for Android and iOS devices.",
+    "description": "Battery charge level as a percentage (0-100). Available for Android, iOS, and web devices. On web, only available in Chromium-based browsers.",
     "examples": [
       75
     ],
@@ -77,7 +85,7 @@
       "provider_url": {
         "description": "The URL of the bot provider's website.",
         "examples": [
-          "https://fingerprint.com"
+          "https://chatgpt.com"
         ],
         "type": "string"
       }
@@ -103,7 +111,7 @@
   "BotType": {
     "description": "Additional classification of the bot type if detected.\n",
     "examples": [
-      "fingerprint_agent"
+      "chatgpt_agent"
     ],
     "type": "string"
   },
@@ -239,7 +247,7 @@
     "type": "string"
   },
   "DeviceMemory": {
-    "description": "Rounded amount of RAM in gigabytes.",
+    "description": "Rounded amount of RAM in gigabytes. Available for browsers, Android, and iOS devices.",
     "examples": [
       8
     ],
@@ -329,8 +337,11 @@
   },
   "Event": {
     "additionalProperties": true,
-    "description": "Contains results from Fingerprint Identification and all active Smart Signals.",
+    "description": "Contains results from Fingerprint Identification and all active Smart Signals. Some Smart Signals are only supported for certain device types, these fields will be omitted for events not generated from the supported devices. Consult the [Smart Signals reference](https://docs.fingerprint.com/docs/smart-signals-reference) for more details.",
     "properties": {
+      "active_call": {
+        "$ref": "#/$defs/ActiveCall"
+      },
       "bot": {
         "$ref": "#/$defs/BotResult"
       },
@@ -1148,6 +1159,13 @@
     "description": "iOS specific jailbreak detection. There are 2 values: \n* `true` - Jailbreak detected.\n* `false` - No signs of jailbreak or the client is not iOS.\n",
     "type": "boolean"
   },
+  "KeyboardLayoutHash": {
+    "description": "Unique identifier for the user's keyboard layout.",
+    "examples": [
+      "3f33b68235d36b8821147349f1161379"
+    ],
+    "type": "string"
+  },
   "Labels": {
     "description": "Each label returns a prediction (true or false) for a specific use case (label field) based on a machine learning score. The machine learning score is determined by a model trained on customer data for that use case. This field is in the beta phase and only available to select customers. If you are interested, please [contact our support team](https://fingerprint.com/support/).\n",
     "items": {
@@ -1434,6 +1452,9 @@
       "audio": {
         "$ref": "#/$defs/Audio"
       },
+      "battery_charging": {
+        "$ref": "#/$defs/BatteryCharging"
+      },
       "battery_level": {
         "$ref": "#/$defs/BatteryLevel"
       },
@@ -1478,6 +1499,9 @@
       },
       "indexed_db": {
         "$ref": "#/$defs/IndexedDb"
+      },
+      "keyboard_layout_hash": {
+        "$ref": "#/$defs/KeyboardLayoutHash"
       },
       "languages": {
         "$ref": "#/$defs/Languages"
@@ -1841,7 +1865,7 @@
   },
   "Velocity": {
     "additionalProperties": true,
-    "description": "Sums key data points for a specific `visitor_id`, `ip_address` and `linked_id` at three distinct time\nintervals: 5 minutes, 1 hour, and 24 hours as follows: \n\n- Number of distinct IP addresses associated to the visitor Id.\n- Number of distinct linked Ids associated with the visitor Id.\n- Number of distinct countries associated with the visitor Id.\n- Number of identification events associated with the visitor Id.\n- Number of identification events associated with the detected IP address.\n- Number of distinct IP addresses associated with the provided linked Id.\n- Number of distinct visitor Ids associated with the provided linked Id.\n\nThe `24h` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`,\n`distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted \nif the number of `events` for the visitor Id in the last 24\nhours (`events.['24h']`) is higher than 20.000.\n\nAll will not necessarily be returned in a response, some may be omitted if the \nassociated event does not have the required data, such as a linked_id.\n",
+    "description": "Sums key data points for a specific `visitor_id`, `ip_address` and `linked_id` at three distinct time\nintervals: 5 minutes, 1 hour, and 24 hours as follows: \n\n- Number of distinct IP addresses associated to the visitor Id.\n- Number of distinct linked Ids associated with the visitor Id.\n- Number of distinct countries associated with the visitor Id.\n- Number of identification events associated with the visitor Id.\n- Number of identification events associated with the detected IP address.\n- Number of distinct IP addresses associated with the provided linked Id.\n- Number of distinct visitor Ids associated with the provided linked Id.\n\nThe `24_hours` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`,\n`distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted \nif the number of `events` for the visitor Id in the last 24\nhours (`events.['24_hours']`) is higher than 20.000.\n\nAll will not necessarily be returned in a response, some may be omitted if the \nassociated event does not have the required data, such as a linked_id.\n",
     "properties": {
       "distinct_country": {
         "$ref": "#/$defs/VelocityData"
@@ -1880,7 +1904,7 @@
         "type": "integer"
       },
       "24_hours": {
-        "description": "The `24_hours` interval of `distinct_ip`, `distinct_linked_id`, `distinct_country`, `distinct_ip_by_linked_id` and `distinct_visitor_id_by_linked_id` will be omitted if the number of `events` for the visitor Id in the last 24 hours (`events.['24_hours']`) is higher than 20.000.\n",
+        "description": "Count for the last 24 hours of velocity data, from the time of the event.\n",
         "examples": [
           5
         ],
@@ -1974,7 +1998,7 @@
     "type": "object"
   },
   "VpnOriginCountry": {
-    "description": "Country of the request (only for Android SDK version \u003e= 2.4.0, ISO 3166 format or unknown).\n",
+    "description": "Country of the request (Android SDK version \u003e= 2.4.0, iOS SDK version \u003e= 2.9.0, JS agent \u003e= 3.12.9 / 4.0.2), ISO 3166 format or unknown.\n",
     "examples": [
       "DE"
     ],

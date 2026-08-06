@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -1488,6 +1489,234 @@ func TestAnalytics_PublicMode_NoSubID_EmitsNothing(t *testing.T) {
 
 	if got := len(emitter.snapshot()); got != 0 {
 		t.Errorf("missing sub_id should result in 0 emitted events, got %d", got)
+	}
+}
+
+// --- Group: request inspector hook ---
+
+func TestRequestInspector_ReceivesHeadersAndRemoteAddr(t *testing.T) {
+	ins := newRecordingInspector()
+	cfg := &config.Config{
+		AuthToken: defaultAuthToken,
+		Transport: "streamable-http",
+	}
+	ts := setupTestServerWithInspector(t, cfg, ins, nil)
+
+	// Connect a real MCP client that sends a custom header on every request
+	// so we can verify headers arrive verbatim.
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: ts.URL + "/mcp",
+		HTTPClient: &http.Client{
+			Transport: &authRoundTripper{
+				token: defaultAuthToken,
+				base: &headerRoundTripper{
+					headers: map[string]string{"X-Inspect-Fixture": "fixture-value-123"},
+					base:    http.DefaultTransport,
+				},
+			},
+		},
+	}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect MCP client: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	infos := ins.snapshot()
+	if len(infos) == 0 {
+		t.Fatal("expected the inspector to see at least one request, got 0")
+	}
+	var sawPost bool
+	for i, info := range infos {
+		if got := info.Header.Get("Authorization"); got != "Bearer "+defaultAuthToken {
+			t.Errorf("request %d: Authorization=%q, want %q", i, got, "Bearer "+defaultAuthToken)
+		}
+		if got := info.Header.Get("X-Inspect-Fixture"); got != "fixture-value-123" {
+			t.Errorf("request %d: X-Inspect-Fixture=%q, want %q", i, got, "fixture-value-123")
+		}
+		if info.Method == "" {
+			t.Errorf("request %d: Method is empty", i)
+		}
+		if info.Method == http.MethodPost {
+			sawPost = true
+		}
+		if info.URL == nil || info.URL.Path != "/mcp" {
+			t.Errorf("request %d: URL=%v, want path /mcp", i, info.URL)
+		}
+		if info.RemoteIP != "127.0.0.1" {
+			t.Errorf("request %d: RemoteIP=%q, want 127.0.0.1", i, info.RemoteIP)
+		}
+		if info.RemotePort <= 0 || info.RemotePort > 65535 {
+			t.Errorf("request %d: RemotePort=%d, want a valid TCP port", i, info.RemotePort)
+		}
+	}
+	if !sawPost {
+		t.Error("expected at least one POST request to be inspected (MCP messages are POSTed)")
+	}
+
+	// Method and URL arrive verbatim, query string included. A raw
+	// unauthenticated POST is enough to prove it: the hook fires before
+	// auth, so the 401 outcome doesn't matter.
+	resp, err := http.Post(ts.URL+"/mcp?fixture=query-123", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST /mcp with query: %v", err)
+	}
+	resp.Body.Close()
+	infos = ins.snapshot()
+	last := infos[len(infos)-1]
+	if last.Method != http.MethodPost {
+		t.Errorf("raw request: Method=%q, want POST", last.Method)
+	}
+	if last.URL == nil || last.URL.Path != "/mcp" || last.URL.RawQuery != "fixture=query-123" {
+		t.Errorf("raw request: URL=%v, want path /mcp with query fixture=query-123", last.URL)
+	}
+
+	// The hook is scoped to the MCP endpoint: /health must not fire it.
+	before := len(ins.snapshot())
+	healthResp, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	healthResp.Body.Close()
+	if got := len(ins.snapshot()); got != before {
+		t.Errorf("/health should not fire the inspector: records went %d -> %d", before, got)
+	}
+}
+
+func TestRequestInspector_FiresOnFailedAuth(t *testing.T) {
+	ins := newRecordingInspector()
+	cfg := &config.Config{
+		AuthToken: defaultAuthToken,
+		Transport: "streamable-http",
+	}
+	ts := setupTestServerWithInspector(t, cfg, ins, nil)
+
+	if _, err := tryConnectMCPClient(t, ts.URL, "wrong-token"); err == nil {
+		t.Fatal("expected connection with a bad token to fail")
+	}
+
+	// The inspector wraps outside auth, so rejected requests are still seen.
+	infos := ins.snapshot()
+	if len(infos) == 0 {
+		t.Fatal("inspector should see requests that fail authentication, got 0 records")
+	}
+	if got := infos[0].Header.Get("Authorization"); got != "Bearer wrong-token" {
+		t.Errorf("Authorization=%q, want %q", got, "Bearer wrong-token")
+	}
+}
+
+func TestRequestInspector_FailOpen(t *testing.T) {
+	capture := newCaptureHandler()
+	ins := &recordingInspector{err: errors.New("audit backend unavailable")}
+	cfg := &config.Config{
+		AuthToken: defaultAuthToken,
+		Transport: "streamable-http",
+	}
+	ts := setupTestServerWithInspector(t, cfg, ins, slog.New(capture))
+
+	// Every Inspect call fails, but requests must still be served.
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("requests must succeed when the inspector fails (fail-open): %v", err)
+	}
+	if len(ins.snapshot()) == 0 {
+		t.Error("inspector should still have been invoked")
+	}
+
+	// The failure must be surfaced in the server log.
+	var saw bool
+	for _, r := range capture.snapshot() {
+		if r.Message != "request inspector failed" {
+			continue
+		}
+		saw = true
+		attrs := recordAttrs(r)
+		if got := fmt.Sprint(attrs["err"]); !strings.Contains(got, "audit backend unavailable") {
+			t.Errorf("err attr = %q, want it to contain %q", got, "audit backend unavailable")
+		}
+		if got := fmt.Sprint(attrs["remote_ip"]); got != "127.0.0.1" {
+			t.Errorf("remote_ip attr = %q, want 127.0.0.1", got)
+		}
+	}
+	if !saw {
+		t.Error("expected a 'request inspector failed' log line")
+	}
+}
+
+func TestRequestInspector_Stdio_NeverFires(t *testing.T) {
+	ins := newRecordingInspector()
+	app, err := New(&config.Config{Transport: "stdio"}, &opts{inspector: ins})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	go func() {
+		_ = app.server.Run(ctx, serverTransport)
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect to stdio server: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	if _, err := session.ListTools(ctx, &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	if got := len(ins.snapshot()); got != 0 {
+		t.Errorf("stdio transport must never fire the inspector, got %d records", got)
+	}
+}
+
+func TestRequestInspector_ClosedOnRunExit(t *testing.T) {
+	ins := newRecordingInspector()
+
+	// An unsupported transport makes Run fail fast after setup; the deferred
+	// drain must still close the inspector on that exit path.
+	err := Run(context.Background(), &config.Config{Transport: "bogus"},
+		WithLogger(slog.New(slog.DiscardHandler)),
+		WithRequestInspector(ins),
+	)
+	if err == nil {
+		t.Fatal("expected Run to fail with an unsupported transport")
+	}
+	if got := ins.closeCount(); got != 1 {
+		t.Errorf("inspector Close calls = %d, want 1 (Run must drain the inspector on every exit path)", got)
+	}
+}
+
+func TestSplitRemoteAddr(t *testing.T) {
+	tests := []struct {
+		addr     string
+		wantIP   string
+		wantPort int
+	}{
+		{"203.0.113.7:54321", "203.0.113.7", 54321},
+		{"[2001:db8::1]:443", "2001:db8::1", 443},
+		{"1.2.3.4:http", "1.2.3.4", 0},
+		{"garbage", "garbage", 0},
+		{"", "", 0},
+	}
+	for _, tt := range tests {
+		ip, port := splitRemoteAddr(tt.addr)
+		if ip != tt.wantIP || port != tt.wantPort {
+			t.Errorf("splitRemoteAddr(%q) = (%q, %d), want (%q, %d)", tt.addr, ip, port, tt.wantIP, tt.wantPort)
+		}
 	}
 }
 
