@@ -1436,6 +1436,76 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	}
 }
 
+// The inspector and the analytics event are the two halves of the same
+// request, and nothing links them unless both report the client's session id.
+// This is what makes an inspected request attributable to the client that
+// named itself on initialize.
+func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
+	const sessionID = "N7QHUFURVHGG3X4OAOOPEHPNVY"
+
+	ins := newRecordingInspector()
+	emitter := newRecordingEmitter()
+	privKey, pubPEM := generateES256KeyPEM(t)
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithInspectorAndEmitter(t, cfg, ins, emitter)
+
+	// Analytics are gated on a subscription id, so this needs a real public-mode JWT.
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_test_xyz")
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: ts.URL + "/mcp",
+		HTTPClient: &http.Client{
+			Transport: &authRoundTripper{
+				token: token,
+				base: &headerRoundTripper{
+					headers: map[string]string{"Mcp-Session-Id": sessionID},
+					base:    http.DefaultTransport,
+				},
+			},
+		},
+	}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect MCP client: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	// The inspector sees it as a header, which is how it reaches the edge payload.
+	var inspectedSession bool
+	for _, info := range ins.snapshot() {
+		if info.Header.Get("Mcp-Session-Id") == sessionID {
+			inspectedSession = true
+			break
+		}
+	}
+	if !inspectedSession {
+		t.Error("expected the inspector to see Mcp-Session-Id on at least one request")
+	}
+
+	// And the analytics event reports the same value, which is the join.
+	events := emitter.snapshot()
+	if len(events) == 0 {
+		t.Fatal("expected at least one analytics event, got 0")
+	}
+	for _, ev := range events {
+		if ev.Type != "mcp_method_called" {
+			continue
+		}
+		if got := ev.Properties["session_id"]; got != sessionID {
+			t.Errorf("%v: session_id=%v, want %s", ev.Properties["method"], got, sessionID)
+		}
+	}
+}
+
 func TestAnalytics_PrivateMode_EmitsNothing(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()

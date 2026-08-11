@@ -370,7 +370,7 @@ func (a *App) handler() http.Handler {
 	apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, bearerTokenOptions)
 	// The inspector wraps outside auth so the embedder also sees requests
 	// that later fail authentication.
-	mux.Handle("/mcp", a.inspectMiddleware(apiKeyAuth(mcpHandler)))
+	mux.Handle("/mcp", a.sessionIDMiddleware(a.inspectMiddleware(apiKeyAuth(mcpHandler))))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -426,6 +426,30 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 // interface value can crash even on a "nil-checked" path) between the
 // two reads. Reading once removes that window entirely, regardless of
 // whether anything mutates the field after New() returns today.
+// sessionIDKey carries the client's Mcp-Session-Id from the HTTP layer down
+// to the MCP method handlers, which never see the request itself.
+type sessionIDKey struct{}
+
+// sessionIDFromContext returns the Mcp-Session-Id for this request, or "" in
+// stdio mode and for clients that don't send one.
+func sessionIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(sessionIDKey{}).(string)
+	return id
+}
+
+// sessionIDMiddleware stashes the client's Mcp-Session-Id in the request
+// context. It's read from the header rather than mcp.Session.ID() because in
+// stateless mode the SDK never assigns one, yet clients still send their own,
+// and that value is what correlates a log line to an inspected request.
+func (a *App) sessionIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := r.Header.Get("Mcp-Session-Id"); id != "" {
+			r = r.WithContext(context.WithValue(r.Context(), sessionIDKey{}, id))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (a *App) inspectMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ins := a.opts.inspector
@@ -513,13 +537,27 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if pr, ok := req.(*mcp.GetPromptRequest); ok {
 			promptName = pr.Params.Name
 		}
+		// initialize carries ClientInfo in its own params; later methods can only
+		// get it from the session. In stateless mode the session is torn down per
+		// request, so this recovers the client on subsequent calls only when the
+		// server is running stateful. Where it can't, session_id below is what
+		// ties the call back to the initialize that named the client.
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			if ci := ir.Params.ClientInfo; ci != nil {
 				clientName = ci.Name
 				clientVersion = ci.Version
-				clientInfo = ci.Name + "/" + ci.Version
+			}
+		} else if ss, ok := req.GetSession().(*mcp.ServerSession); ok && ss != nil {
+			if ip := ss.InitializeParams(); ip != nil && ip.ClientInfo != nil {
+				clientName = ip.ClientInfo.Name
+				clientVersion = ip.ClientInfo.Version
 			}
 		}
+		if clientName != "" {
+			clientInfo = clientName + "/" + clientVersion
+		}
+
+		sessionID := sessionIDFromContext(ctx)
 		// subID is optional. GetExtra() returns nil in stdio mode (no auth
 		// pipeline runs) and TokenInfo is nil in private-mode HTTP without a
 		// configured AuthToken. Guard both dereferences so the middleware
@@ -544,6 +582,9 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 			if promptName != "" {
 				attrs = append(attrs, "prompt_name", promptName)
+			}
+			if sessionID != "" {
+				attrs = append(attrs, "session_id", sessionID)
 			}
 			if subID != "" {
 				attrs = append(attrs, "sub_id", subID)
@@ -605,6 +646,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			req:           req,
 			method:        method,
 			subID:         subID,
+			sessionID:     sessionID,
 			toolName:      toolName,
 			resourceURI:   resourceURI,
 			promptName:    promptName,

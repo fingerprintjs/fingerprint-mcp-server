@@ -11,9 +11,10 @@ import (
 // analyticsInputs bundles the values emitAnalytics needs from the
 // middleware so the call site stays a single line.
 type analyticsInputs struct {
-	req    mcp.Request
-	method string
-	subID  string
+	req       mcp.Request
+	method    string
+	subID     string
+	sessionID string
 
 	toolName, resourceURI, promptName string
 	clientName, clientVersion         string
@@ -93,13 +94,18 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 			props["result_size_bytes"] = int64(len(b))
 		}
 	}
-	// client_name/client_version are only known on initialize (that's the
-	// only method that carries ClientInfo). They're per-session, not
-	// per-subscription, so they ride along as regular event properties on
-	// the initialize event and aren't repeated on later events.
+	// Present on initialize, and on later methods only when the session
+	// survives between requests. Group by client_name on the initialize event
+	// rather than on every method, or the rest report no client at all.
 	if in.clientName != "" {
 		props["client_name"] = in.clientName
 		props["client_version"] = in.clientVersion
+	}
+	// The client's own Mcp-Session-Id, also forwarded to the request inspector
+	// in the request headers. It's what joins an inspected request back to the
+	// initialize that named the client.
+	if in.sessionID != "" {
+		props["session_id"] = in.sessionID
 	}
 	a.opts.analyticsEmitter().Emit(analytics.Event{
 		Type:           "mcp_method_called",
