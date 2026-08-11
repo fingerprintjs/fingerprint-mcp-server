@@ -413,19 +413,6 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 	return fmt.Errorf("running streamable-http server: %w", err)
 }
 
-// inspectMiddleware hands request metadata to the configured
-// requestinspect.Inspector; see the requestinspect package doc for the
-// contract (fail-open, read-only Header/URL, never on stdio).
-//
-// a.opts.inspector is read exactly once per request, into a local, and
-// every subsequent use within the request refers to that local rather
-// than re-reading the field. This isn't just style: a middleware built
-// once at startup and then split into a separate nil-check and a later,
-// independent read of the same shared field would leave a window where
-// the field could change (or be observed mid-write, which for a Go
-// interface value can crash even on a "nil-checked" path) between the
-// two reads. Reading once removes that window entirely, regardless of
-// whether anything mutates the field after New() returns today.
 // sessionIDKey carries the client's Mcp-Session-Id from the HTTP layer down
 // to the MCP method handlers, which never see the request itself.
 type sessionIDKey struct{}
@@ -450,6 +437,19 @@ func (a *App) sessionIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// inspectMiddleware hands request metadata to the configured
+// requestinspect.Inspector; see the requestinspect package doc for the
+// contract (fail-open, read-only Header/URL, never on stdio).
+//
+// a.opts.inspector is read exactly once per request, into a local, and
+// every subsequent use within the request refers to that local rather
+// than re-reading the field. This isn't just style: a middleware built
+// once at startup and then split into a separate nil-check and a later,
+// independent read of the same shared field would leave a window where
+// the field could change (or be observed mid-write, which for a Go
+// interface value can crash even on a "nil-checked" path) between the
+// two reads. Reading once removes that window entirely, regardless of
+// whether anything mutates the field after New() returns today.
 func (a *App) inspectMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ins := a.opts.inspector
@@ -488,12 +488,13 @@ func splitRemoteAddr(addr string) (ip string, port int) {
 }
 
 func (a *App) corsMiddleware(next http.Handler) http.Handler {
+	// Mcp-Session-Id is allowed in both modes. Stateless doesn't issue one, but
+	// clients send their own and it's what correlates their requests, so a
+	// browser client has to be able to send it. Exposing it on the response
+	// stays gated below, since only stateful mode returns it.
 	allowHeaders := []string{
-		"Content-Type", "Mcp-Protocol-Version",
+		"Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id",
 		"x-custom-auth-headers", // workaround for mcp inspector that sends this header by mistake. see: https://github.com/modelcontextprotocol/inspector/issues/1100
-	}
-	if !config.STATELESS {
-		allowHeaders = append(allowHeaders, "Mcp-Session-Id")
 	}
 	if a.cfg.AuthToken != "" || a.cfg.PublicMode {
 		allowHeaders = append(allowHeaders, "Authorization")
@@ -553,8 +554,13 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				clientVersion = ip.ClientInfo.Version
 			}
 		}
-		if clientName != "" {
+		// Version is optional in the protocol, and "myclient/" reads like a
+		// truncated value rather than an absent one.
+		switch {
+		case clientName != "" && clientVersion != "":
 			clientInfo = clientName + "/" + clientVersion
+		case clientName != "":
+			clientInfo = clientName
 		}
 
 		sessionID := sessionIDFromContext(ctx)

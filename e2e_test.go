@@ -1253,6 +1253,26 @@ func TestCORS_Options_PrivateMode(t *testing.T) {
 	}
 }
 
+// A browser client can only send Mcp-Session-Id if preflight allows it, and
+// that header is what correlates a client's requests. Stateless doesn't issue
+// one, so gating the allow-list on STATELESS would silently shut browser
+// clients out of the correlation.
+func TestCORS_AllowsSessionIDHeader(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{PublicMode: true})
+
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/mcp", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("OPTIONS request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
+	if !strings.Contains(allowHeaders, "Mcp-Session-Id") {
+		t.Errorf("expected Mcp-Session-Id in allowed headers, got %q", allowHeaders)
+	}
+}
+
 // TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
 // extracts resource_uri from resources/read requests and prompt_name from
 // prompts/get requests and includes them in the structured log line, mirroring
