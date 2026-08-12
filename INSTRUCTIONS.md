@@ -11,7 +11,7 @@ Tools, resources, and prompts for the Fingerprint device intelligence platform (
 
 - Prefer `search_events` over `get_event` unless you have a specific `requestId`.
 - `search_events` `start`/`end` are RFC3339; derive from current wall-clock time, not training data.
-- Event timestamps (`timestamp`, `first_seen_at`, `last_seen_at`) come back as RFC3339 UTC strings — read them as-is, no conversion.
+- Event timestamps (`timestamp`, `first_seen_at`, `last_seen_at`, `factory_reset_timestamp`) come back as RFC3339 UTC strings, read them as-is, no conversion.
 - Treat the event schema resource as authoritative for field questions.
 - API key types: **public** (JS Agent), **secret** (server-to-server), **management** (workspace admin), **proxy** (proxy integrations).
 - `delete_environment` / `delete_api_key` are irreversible — confirm first.
