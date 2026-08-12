@@ -2,6 +2,7 @@ package mgmtapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"time"
 )
@@ -27,6 +28,44 @@ type APIKey struct {
 	CreatedAt time.Time `json:"created_at" jsonschema:"Timestamp when the API key was created"`
 	// DisabledAt is the timestamp when the API key was disabled.
 	DisabledAt *time.Time `json:"disabled_at" jsonschema:"Timestamp when the API key was disabled"`
+}
+
+// UnmarshalJSON accepts both spellings of the multi-word fields, because the
+// Management API is not consistent between them: GET /api-keys returns
+// snake_case (created_at, rate_limit, disabled_at) while GET /api-keys/{id}
+// returns camelCase (createdAt, rateLimit, disabledAt). Single-word fields are
+// spelled identically either way, which is why only these three are affected.
+//
+// Binding only the snake_case tags meant get_api_key reported a zero
+// created_at (year 1) and a zero rate_limit, so an agent reasoning about key
+// age or throttling was misled. The inconsistency belongs upstream, but until
+// it's fixed there this tolerates both rather than being wrong on one path.
+func (k *APIKey) UnmarshalJSON(data []byte) error {
+	// alias sheds the custom unmarshaller so the embedded decode doesn't recurse.
+	type alias APIKey
+	var raw struct {
+		alias
+		CreatedAtCamel  *time.Time `json:"createdAt"`
+		RateLimitCamel  *float64   `json:"rateLimit"`
+		DisabledAtCamel *time.Time `json:"disabledAt"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*k = APIKey(raw.alias)
+	// snake_case wins when present; the camelCase keys only fill the gaps, so a
+	// response carrying both can't have the fallback overwrite the real value.
+	if k.CreatedAt.IsZero() && raw.CreatedAtCamel != nil {
+		k.CreatedAt = *raw.CreatedAtCamel
+	}
+	if k.RateLimit == 0 && raw.RateLimitCamel != nil {
+		k.RateLimit = *raw.RateLimitCamel
+	}
+	if k.DisabledAt == nil {
+		k.DisabledAt = raw.DisabledAtCamel
+	}
+	return nil
 }
 
 type ListAPIKeysParams struct {
