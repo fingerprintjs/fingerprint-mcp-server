@@ -43,7 +43,9 @@ func (a *App) registerEventResource(_ context.Context) error {
 		}
 
 		schema.StripAdditionalProperties(event)
-		bytes, err := json.Marshal(event)
+		// Same conversion the get_event tool applies, so the two paths can't
+		// disagree about what a timestamp looks like.
+		bytes, err := json.Marshal(schema.ReadableTimestamps(event))
 		if err != nil {
 			return nil, fmt.Errorf("could not serialize event into json")
 		}
@@ -111,7 +113,7 @@ func (a *App) registerAPIKeySchemaResource(_ context.Context) error {
 }
 
 func (a *App) registerEventSchemaResource(_ context.Context) error {
-	content := schema.SchemaFromStruct(GetEventOutput{})
+	content := schema.PatchTimestampFormat(schema.SchemaFromStruct(GetEventOutput{}))
 
 	a.server.AddResource(&mcp.Resource{
 		Description: "JSON Schema for identification events",
