@@ -424,13 +424,39 @@ func sessionIDFromContext(ctx context.Context) string {
 	return id
 }
 
+// maxSessionIDLen bounds a client-supplied value that ends up in log lines and,
+// for embedders, in analytics properties. The spec sets no maximum, so this is
+// a sanity cap rather than a protocol rule.
+const maxSessionIDLen = 128
+
+// validSessionID reports whether the client's Mcp-Session-Id is safe to record.
+// The MCP spec restricts it to visible ASCII (0x21 to 0x7E), which excludes
+// spaces, control characters and newlines. This value is entirely
+// client-controlled and reaches logs and analytics, so it's bounded here rather
+// than at each place that consumes it.
+func validSessionID(id string) bool {
+	if id == "" || len(id) > maxSessionIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x21 || id[i] > 0x7E {
+			return false
+		}
+	}
+	return true
+}
+
 // sessionIDMiddleware stashes the client's Mcp-Session-Id in the request
 // context. It's read from the header rather than mcp.Session.ID() because in
 // stateless mode the SDK never assigns one, yet clients still send their own,
 // and that value is what correlates a log line to an inspected request.
+//
+// An id that doesn't match the spec is dropped rather than truncated: a
+// malformed one can't correlate to anything anyway, so recording part of it
+// would only add noise.
 func (a *App) sessionIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if id := r.Header.Get("Mcp-Session-Id"); id != "" {
+		if id := r.Header.Get("Mcp-Session-Id"); validSessionID(id) {
 			r = r.WithContext(context.WithValue(r.Context(), sessionIDKey{}, id))
 		}
 		next.ServeHTTP(w, r)

@@ -1887,3 +1887,36 @@ func TestGetCurrentTime_InvalidTimezone(t *testing.T) {
 		t.Errorf("expected 'invalid timezone' error, got: %s", text)
 	}
 }
+
+// Mcp-Session-Id is entirely client-controlled and lands in log lines and, for
+// embedders, in an analytics property and the request inspector's payload. The
+// spec restricts it to visible ASCII, so anything outside that is dropped
+// rather than recorded.
+func TestSessionID_RejectsValuesOutsideTheSpec(t *testing.T) {
+	cases := []struct {
+		name string
+		id   string
+		want bool
+	}{
+		{"typical id", "N7QHUFURVHGG3X4OAOOPEHPNVY", true},
+		{"punctuation is visible ascii", "sess-1234_ab.cd", true},
+		{"lowest and highest allowed", "!~", true},
+		{"empty", "", false},
+		{"space", "sess 1234", false},
+		{"newline injects a log line", "sess\nlevel=ERROR fake", false},
+		{"carriage return", "sess\r\n", false},
+		{"tab", "sess\t1234", false},
+		{"null byte", "sess\x00", false},
+		{"del character", "sess\x7f", false},
+		{"non-ascii", "sessión", false},
+		{"at the cap", strings.Repeat("a", maxSessionIDLen), true},
+		{"over the cap", strings.Repeat("a", maxSessionIDLen+1), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validSessionID(tc.id); got != tc.want {
+				t.Errorf("validSessionID(%q) = %v, want %v", tc.id, got, tc.want)
+			}
+		})
+	}
+}
