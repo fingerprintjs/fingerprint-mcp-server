@@ -16,11 +16,18 @@ const rfc3339Millis = "2006-01-02T15:04:05.000Z07:00"
 // epochMillisFields are the response fields the Fingerprint API returns as Unix
 // epoch milliseconds. Every name here is unique to a timestamp across the whole
 // event shape, so matching on the key alone can't hit an unrelated number.
+//
+// factory_reset_timestamp is deliberately absent. The API documents 0 on that
+// field as "no factory reset detected, or the request came from a browser", so
+// it is a timestamp-or-sentinel rather than an instant. Converting it would
+// render that 0 as 1970-01-01, a real-looking date for something that never
+// happened, which is the exact misreading this conversion exists to prevent.
+// Leaving the value alone while still retyping the schema produced a payload
+// that contradicted its own schema, so it stays an integer end to end.
 var epochMillisFields = map[string]bool{
-	"timestamp":               true,
-	"first_seen_at":           true,
-	"last_seen_at":            true,
-	"factory_reset_timestamp": true,
+	"timestamp":     true,
+	"first_seen_at": true,
+	"last_seen_at":  true,
 }
 
 // ReadableTimestamps re-encodes v with every epoch-millisecond field rewritten
@@ -52,12 +59,12 @@ func ReadableTimestamps(v any) any {
 }
 
 // epochMillisDefs are top-level $defs that are themselves an epoch-millisecond
-// integer. Event.timestamp and factory_reset_timestamp are $refs to these
-// rather than inline properties, so matching on the property name alone misses
-// them entirely.
+// integer. Event.timestamp is a $ref to one of these rather than an inline
+// property, so matching on the property name alone misses it entirely.
+//
+// FactoryReset is deliberately absent, matching epochMillisFields above.
 var epochMillisDefs = map[string]bool{
-	"Timestamp":    true,
-	"FactoryReset": true,
+	"Timestamp": true,
 }
 
 // embeddedExample strips the epoch example the upstream spec writes into the

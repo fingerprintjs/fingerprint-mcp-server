@@ -210,11 +210,13 @@ func TestPatchTimestampFormat_RewritesRefdDefsAndEmbeddedExamples(t *testing.T) 
 	}
 	defs := got["$defs"].(map[string]any)
 
-	for _, name := range []string{"Timestamp", "FactoryReset"} {
-		def := defs[name].(map[string]any)
-		if def["type"] != "string" || def["format"] != "date-time" {
-			t.Errorf("$defs.%s = %#v, want string/date-time", name, def)
-		}
+	ts := defs["Timestamp"].(map[string]any)
+	if ts["type"] != "string" || ts["format"] != "date-time" {
+		t.Errorf("$defs.Timestamp = %#v, want string/date-time", ts)
+	}
+	// FactoryReset is excluded, see TestPatchTimestampFormat_LeavesFactoryResetAsInteger.
+	if fr := defs["FactoryReset"].(map[string]any); fr["type"] != "integer" {
+		t.Errorf("$defs.FactoryReset = %#v, want integer", fr)
 	}
 
 	fs := defs["Identification"].(map[string]any)["properties"].(map[string]any)["first_seen_at"].(map[string]any)
@@ -229,5 +231,61 @@ func TestPatchTimestampFormat_RewritesRefdDefsAndEmbeddedExamples(t *testing.T) 
 	ref := defs["Event"].(map[string]any)["properties"].(map[string]any)["timestamp"].(map[string]any)
 	if ref["$ref"] != "#/$defs/Timestamp" {
 		t.Errorf("Event.timestamp = %#v, want the $ref untouched", ref)
+	}
+}
+
+// factory_reset_timestamp is excluded on purpose. The API documents 0 as "no
+// factory reset detected", so converting it would produce 1970-01-01 for
+// something that never happened, and leaving the 0 alone while retyping the
+// schema to string produced a payload that contradicted its own schema.
+func TestReadableTimestamps_LeavesFactoryResetAlone(t *testing.T) {
+	got := roundTrip(t, map[string]any{
+		"factory_reset_timestamp": 1786458425180,
+		"timestamp":               1786458425180,
+	})
+
+	if got["factory_reset_timestamp"] != float64(1786458425180) {
+		t.Errorf("factory_reset_timestamp = %#v, want the epoch integer untouched", got["factory_reset_timestamp"])
+	}
+	// The neighbouring field still converts, so this is an exclusion rather
+	// than the conversion being switched off.
+	if got["timestamp"] != "2026-08-11T14:27:05.180Z" {
+		t.Errorf("timestamp = %v, want it still converted", got["timestamp"])
+	}
+}
+
+// The schema has to keep describing it as an integer, or an agent is told to
+// expect a string and receives a number.
+func TestPatchTimestampFormat_LeavesFactoryResetAsInteger(t *testing.T) {
+	in := json.RawMessage(`{
+	  "$defs": {
+	    "FactoryReset": {"type": "integer", "description": "The time of the most recent factory reset is expressed as Unix epoch time. When it cannot be detected this field will correspond to a value of 0."},
+	    "Timestamp": {"type": "integer", "description": "Timestamp of the event with millisecond precision in Unix time."},
+	    "Event": {"properties": {"factory_reset_timestamp": {"type": "integer", "description": "Unix epoch time milliseconds timestamp."}}}
+	  }
+	}`)
+
+	var got map[string]any
+	if err := json.Unmarshal(PatchTimestampFormat(in), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	defs := got["$defs"].(map[string]any)
+
+	fr := defs["FactoryReset"].(map[string]any)
+	if fr["type"] != "integer" {
+		t.Errorf("$defs.FactoryReset type = %v, want integer", fr["type"])
+	}
+	if desc := fr["description"].(string); !strings.Contains(desc, "Unix epoch time") {
+		t.Errorf("description was rewritten but the type was not: %q", desc)
+	}
+
+	inline := defs["Event"].(map[string]any)["properties"].(map[string]any)["factory_reset_timestamp"].(map[string]any)
+	if inline["type"] != "integer" {
+		t.Errorf("inline factory_reset_timestamp = %#v, want integer", inline)
+	}
+
+	// Timestamp still converts, proving the patch itself still works.
+	if defs["Timestamp"].(map[string]any)["type"] != "string" {
+		t.Errorf("$defs.Timestamp = %#v, want string", defs["Timestamp"])
 	}
 }
