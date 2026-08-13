@@ -22,12 +22,16 @@ type GetEventInput struct {
 
 // GetEventOutput defines the output schema for the get_event tool.
 // Use `ref` tag to reference OpenAPI schemas, `description` tag for inline descriptions.
+//
+// Event is `any` rather than fingerprint.Event because the payload is passed
+// through schema.ReadableTimestamps on the way out, which rewrites epoch
+// milliseconds as RFC3339 and so no longer matches the SDK's integer fields.
 type GetEventOutput struct {
-	Event fingerprint.Event `json:"event" ref:"Event"`
+	Event any `json:"event" ref:"Event"`
 }
 
 type SearchEventsOutput struct {
-	Events fingerprint.EventSearch `json:"events" ref:"EventSearch"`
+	Events any `json:"events" ref:"EventSearch"`
 }
 
 // envelopeOutputSchema builds the slim top-level output schema shared by the
@@ -146,7 +150,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 		schema.FilterProducts(event, input.Products)
 		schema.StripAdditionalProperties(event)
 
-		return nil, &GetEventOutput{Event: *event}, nil
+		return nil, &GetEventOutput{Event: schema.ReadableTimestamps(*event)}, nil
 	})
 
 	return nil
@@ -193,7 +197,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 		}
 		schema.StripAdditionalProperties(events)
 
-		return nil, &SearchEventsOutput{Events: *events}, nil
+		return nil, &SearchEventsOutput{Events: schema.ReadableTimestamps(*events)}, nil
 	})
 
 	return nil
