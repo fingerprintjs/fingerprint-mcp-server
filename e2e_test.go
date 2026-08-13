@@ -1253,6 +1253,26 @@ func TestCORS_Options_PrivateMode(t *testing.T) {
 	}
 }
 
+// A browser client can only send Mcp-Session-Id if preflight allows it, and
+// that header is what correlates a client's requests. Stateless doesn't issue
+// one, so gating the allow-list on STATELESS would silently shut browser
+// clients out of the correlation.
+func TestCORS_AllowsSessionIDHeader(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{PublicMode: true})
+
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/mcp", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("OPTIONS request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
+	if !strings.Contains(allowHeaders, "Mcp-Session-Id") {
+		t.Errorf("expected Mcp-Session-Id in allowed headers, got %q", allowHeaders)
+	}
+}
+
 // TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
 // extracts resource_uri from resources/read requests and prompt_name from
 // prompts/get requests and includes them in the structured log line, mirroring
@@ -1433,6 +1453,76 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	}
 	if !sawInitializeWithClientName {
 		t.Errorf("expected the initialize event to carry client_name in Properties")
+	}
+}
+
+// The inspector and the analytics event are the two halves of the same
+// request, and nothing links them unless both report the client's session id.
+// This is what makes an inspected request attributable to the client that
+// named itself on initialize.
+func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
+	const sessionID = "N7QHUFURVHGG3X4OAOOPEHPNVY"
+
+	ins := newRecordingInspector()
+	emitter := newRecordingEmitter()
+	privKey, pubPEM := generateES256KeyPEM(t)
+	cfg := &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}
+	ts := setupTestServerWithInspectorAndEmitter(t, cfg, ins, emitter)
+
+	// Analytics are gated on a subscription id, so this needs a real public-mode JWT.
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_test_xyz")
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: ts.URL + "/mcp",
+		HTTPClient: &http.Client{
+			Transport: &authRoundTripper{
+				token: token,
+				base: &headerRoundTripper{
+					headers: map[string]string{"Mcp-Session-Id": sessionID},
+					base:    http.DefaultTransport,
+				},
+			},
+		},
+	}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect MCP client: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	// The inspector sees it as a header, which is how it reaches the edge payload.
+	var inspectedSession bool
+	for _, info := range ins.snapshot() {
+		if info.Header.Get("Mcp-Session-Id") == sessionID {
+			inspectedSession = true
+			break
+		}
+	}
+	if !inspectedSession {
+		t.Error("expected the inspector to see Mcp-Session-Id on at least one request")
+	}
+
+	// And the analytics event reports the same value, which is the join.
+	events := emitter.snapshot()
+	if len(events) == 0 {
+		t.Fatal("expected at least one analytics event, got 0")
+	}
+	for _, ev := range events {
+		if ev.Type != "mcp_method_called" {
+			continue
+		}
+		if got := ev.Properties["session_id"]; got != sessionID {
+			t.Errorf("%v: session_id=%v, want %s", ev.Properties["method"], got, sessionID)
+		}
 	}
 }
 
@@ -1795,5 +1885,38 @@ func TestGetCurrentTime_InvalidTimezone(t *testing.T) {
 	}
 	if text := extractTextContent(t, result); !strings.Contains(text, "invalid timezone") {
 		t.Errorf("expected 'invalid timezone' error, got: %s", text)
+	}
+}
+
+// Mcp-Session-Id is entirely client-controlled and lands in log lines and, for
+// embedders, in an analytics property and the request inspector's payload. The
+// spec restricts it to visible ASCII, so anything outside that is dropped
+// rather than recorded.
+func TestSessionID_RejectsValuesOutsideTheSpec(t *testing.T) {
+	cases := []struct {
+		name string
+		id   string
+		want bool
+	}{
+		{"typical id", "N7QHUFURVHGG3X4OAOOPEHPNVY", true},
+		{"punctuation is visible ascii", "sess-1234_ab.cd", true},
+		{"lowest and highest allowed", "!~", true},
+		{"empty", "", false},
+		{"space", "sess 1234", false},
+		{"newline injects a log line", "sess\nlevel=ERROR fake", false},
+		{"carriage return", "sess\r\n", false},
+		{"tab", "sess\t1234", false},
+		{"null byte", "sess\x00", false},
+		{"del character", "sess\x7f", false},
+		{"non-ascii", "sessión", false},
+		{"at the cap", strings.Repeat("a", maxSessionIDLen), true},
+		{"over the cap", strings.Repeat("a", maxSessionIDLen+1), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validSessionID(tc.id); got != tc.want {
+				t.Errorf("validSessionID(%q) = %v, want %v", tc.id, got, tc.want)
+			}
+		})
 	}
 }

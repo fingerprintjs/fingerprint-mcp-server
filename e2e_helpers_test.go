@@ -490,6 +490,37 @@ func setupTestServerWithEmitter(t *testing.T, cfg *config.Config, emitter analyt
 	return ts
 }
 
+// setupTestServerWithInspectorAndEmitter wires both hooks, for tests that
+// check a value reported by one against the same value reported by the other.
+func setupTestServerWithInspectorAndEmitter(
+	t *testing.T,
+	cfg *config.Config,
+	inspector requestinspect.Inspector,
+	emitter analytics.Emitter,
+) *httptest.Server {
+	t.Helper()
+
+	app, err := New(cfg, &opts{inspector: inspector, emitter: emitter})
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := app.registerTools(ctx); err != nil {
+		t.Fatalf("failed to register tools: %v", err)
+	}
+	if err := app.registerResources(ctx); err != nil {
+		t.Fatalf("failed to register resources: %v", err)
+	}
+	if err := app.registerPrompts(ctx); err != nil {
+		t.Fatalf("failed to register prompts: %v", err)
+	}
+
+	ts := httptest.NewServer(app.handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
 // authRoundTripper injects an Authorization: Bearer header into all requests.
 type authRoundTripper struct {
 	token string

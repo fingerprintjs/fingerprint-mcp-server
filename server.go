@@ -370,7 +370,7 @@ func (a *App) handler() http.Handler {
 	apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, bearerTokenOptions)
 	// The inspector wraps outside auth so the embedder also sees requests
 	// that later fail authentication.
-	mux.Handle("/mcp", a.inspectMiddleware(apiKeyAuth(mcpHandler)))
+	mux.Handle("/mcp", a.sessionIDMiddleware(a.inspectMiddleware(apiKeyAuth(mcpHandler))))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -411,6 +411,56 @@ func (a *App) runStreamableHTTPServer(_ context.Context) error {
 		err = http.ListenAndServe(addr, handler)
 	}
 	return fmt.Errorf("running streamable-http server: %w", err)
+}
+
+// sessionIDKey carries the client's Mcp-Session-Id from the HTTP layer down
+// to the MCP method handlers, which never see the request itself.
+type sessionIDKey struct{}
+
+// sessionIDFromContext returns the Mcp-Session-Id for this request, or "" in
+// stdio mode and for clients that don't send one.
+func sessionIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(sessionIDKey{}).(string)
+	return id
+}
+
+// maxSessionIDLen bounds a client-supplied value that ends up in log lines and,
+// for embedders, in analytics properties. The spec sets no maximum, so this is
+// a sanity cap rather than a protocol rule.
+const maxSessionIDLen = 128
+
+// validSessionID reports whether the client's Mcp-Session-Id is safe to record.
+// The MCP spec restricts it to visible ASCII (0x21 to 0x7E), which excludes
+// spaces, control characters and newlines. This value is entirely
+// client-controlled and reaches logs and analytics, so it's bounded here rather
+// than at each place that consumes it.
+func validSessionID(id string) bool {
+	if id == "" || len(id) > maxSessionIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x21 || id[i] > 0x7E {
+			return false
+		}
+	}
+	return true
+}
+
+// sessionIDMiddleware stashes the client's Mcp-Session-Id in the request
+// context. It's read from the header rather than mcp.Session.ID() because in
+// stateless mode the SDK never assigns one, yet clients still send their own,
+// and that value is what correlates a log line to an inspected request.
+//
+// An id that doesn't match the spec is dropped rather than truncated: a
+// malformed one can't correlate to anything anyway, so recording part of it
+// would only add noise.
+func (a *App) sessionIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := r.Header.Get("Mcp-Session-Id"); validSessionID(id) {
+			r = r.WithContext(context.WithValue(r.Context(), sessionIDKey{}, id))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // inspectMiddleware hands request metadata to the configured
@@ -464,12 +514,13 @@ func splitRemoteAddr(addr string) (ip string, port int) {
 }
 
 func (a *App) corsMiddleware(next http.Handler) http.Handler {
+	// Mcp-Session-Id is allowed in both modes. Stateless doesn't issue one, but
+	// clients send their own and it's what correlates their requests, so a
+	// browser client has to be able to send it. Exposing it on the response
+	// stays gated below, since only stateful mode returns it.
 	allowHeaders := []string{
-		"Content-Type", "Mcp-Protocol-Version",
+		"Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id",
 		"x-custom-auth-headers", // workaround for mcp inspector that sends this header by mistake. see: https://github.com/modelcontextprotocol/inspector/issues/1100
-	}
-	if !config.STATELESS {
-		allowHeaders = append(allowHeaders, "Mcp-Session-Id")
 	}
 	if a.cfg.AuthToken != "" || a.cfg.PublicMode {
 		allowHeaders = append(allowHeaders, "Authorization")
@@ -513,13 +564,32 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if pr, ok := req.(*mcp.GetPromptRequest); ok {
 			promptName = pr.Params.Name
 		}
+		// initialize carries ClientInfo in its own params; later methods can only
+		// get it from the session. In stateless mode the session is torn down per
+		// request, so this recovers the client on subsequent calls only when the
+		// server is running stateful. Where it can't, session_id below is what
+		// ties the call back to the initialize that named the client.
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
 			if ci := ir.Params.ClientInfo; ci != nil {
 				clientName = ci.Name
 				clientVersion = ci.Version
-				clientInfo = ci.Name + "/" + ci.Version
+			}
+		} else if ss, ok := req.GetSession().(*mcp.ServerSession); ok && ss != nil {
+			if ip := ss.InitializeParams(); ip != nil && ip.ClientInfo != nil {
+				clientName = ip.ClientInfo.Name
+				clientVersion = ip.ClientInfo.Version
 			}
 		}
+		// Version is optional in the protocol, and "myclient/" reads like a
+		// truncated value rather than an absent one.
+		switch {
+		case clientName != "" && clientVersion != "":
+			clientInfo = clientName + "/" + clientVersion
+		case clientName != "":
+			clientInfo = clientName
+		}
+
+		sessionID := sessionIDFromContext(ctx)
 		// subID is optional. GetExtra() returns nil in stdio mode (no auth
 		// pipeline runs) and TokenInfo is nil in private-mode HTTP without a
 		// configured AuthToken. Guard both dereferences so the middleware
@@ -544,6 +614,9 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 			if promptName != "" {
 				attrs = append(attrs, "prompt_name", promptName)
+			}
+			if sessionID != "" {
+				attrs = append(attrs, "session_id", sessionID)
 			}
 			if subID != "" {
 				attrs = append(attrs, "sub_id", subID)
@@ -605,6 +678,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			req:           req,
 			method:        method,
 			subID:         subID,
+			sessionID:     sessionID,
 			toolName:      toolName,
 			resourceURI:   resourceURI,
 			promptName:    promptName,
