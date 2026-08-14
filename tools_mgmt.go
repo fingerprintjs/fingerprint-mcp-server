@@ -128,7 +128,7 @@ type DeleteAPIKeyInput struct {
 // --- Environment management tools ---
 
 func (a *App) registerListEnvironmentsTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:        "list_environments",
 		Description: "Lists all workspace environments. Returns environment details including name, description, limits, and restriction status. For schema, see mcp resource fingerprint://schemas/environment",
 		Annotations: &mcp.ToolAnnotations{
@@ -276,7 +276,7 @@ func (a *App) registerDeleteEnvironmentTool(_ context.Context) error {
 // --- API Key management tools ---
 
 func (a *App) registerListAPIKeysTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:        "list_api_keys",
 		Description: "Lists API keys with optional filters by type (public/secret/proxy), status (enabled/disabled), and environment. Supports pagination. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{
@@ -320,7 +320,7 @@ func (a *App) registerListAPIKeysTool(_ context.Context) error {
 }
 
 func (a *App) registerGetAPIKeyTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:        "get_api_key",
 		Description: "Retrieves detailed information about a specific API key by its ID. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{

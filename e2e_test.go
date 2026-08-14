@@ -48,8 +48,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 12 {
-		t.Errorf("expected 12 tools, got %d: %v", len(names), names)
+	if len(names) != 14 {
+		t.Errorf("expected 14 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestListTools_PrivateMode_ServerKeyOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_current_time", "get_event", "search_events"}
+	expected := []string{"get_current_time", "get_event", "search_events", "list_tools", "call_tool"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -136,6 +136,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 		"get_current_time",
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
+		"list_tools", "call_tool",
 	}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
@@ -170,7 +171,7 @@ func TestListTools_PrivateMode_ReadOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_tools", "call_tool"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -266,8 +267,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 12 {
-		t.Errorf("expected 12 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 14 {
+		t.Errorf("expected 14 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -283,8 +284,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 12 {
-		t.Errorf("expected 12 tools, got %d: %v", len(names), names)
+	if len(names) != 14 {
+		t.Errorf("expected 14 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -310,8 +311,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 12 {
-		t.Errorf("expected 12 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 14 {
+		t.Errorf("expected 14 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -1918,5 +1919,135 @@ func TestSessionID_RejectsValuesOutsideTheSpec(t *testing.T) {
 				t.Errorf("validSessionID(%q) = %v, want %v", tc.id, got, tc.want)
 			}
 		})
+	}
+}
+
+// --- Group: list_tools / call_tool ---
+
+func TestListToolsTool_ListsReadOnlyToolsOnly(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ServerAPIKey:     "test-server-key",
+		ServerAPIURL:     fpAPI.server.URL + "/v4",
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "list_tools", map[string]any{})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out ListToolsOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	var listed []string
+	for _, tool := range out.Tools {
+		listed = append(listed, tool.Name)
+	}
+	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	if len(listed) != len(expected) {
+		t.Errorf("expected %d dispatchable tools, got %d: %v", len(expected), len(listed), listed)
+	}
+	for _, e := range expected {
+		if !slices.Contains(listed, e) {
+			t.Errorf("expected %q to be dispatchable, got %v", e, listed)
+		}
+	}
+	for _, tool := range out.Tools {
+		if tool.InputSchema != nil {
+			t.Errorf("expected no input schema without tool_name, got one for %q", tool.Name)
+		}
+	}
+}
+
+func TestListToolsTool_ReturnsInputSchemaForNamedTool(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "list_tools", map[string]any{"tool_name": "get_current_time"})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out ListToolsOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if len(out.Tools) != 1 || out.Tools[0].Name != "get_current_time" {
+		t.Fatalf("expected only get_current_time, got %v", out.Tools)
+	}
+	if out.Tools[0].InputSchema == nil {
+		t.Fatal("expected an input schema when tool_name is given")
+	}
+	if _, ok := out.Tools[0].InputSchema["properties"]; !ok {
+		t.Errorf("expected the input schema to carry properties, got %v", out.Tools[0].InputSchema)
+	}
+}
+
+func TestCallTool_RunsDispatchedTool(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "call_tool", map[string]any{
+		"tool_name": "get_current_time",
+		"arguments": map[string]any{"timezone": "America/New_York"},
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out GetCurrentTimeOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse dispatched output: %v", err)
+	}
+	if out.Timezone != "America/New_York" || out.Local == "" {
+		t.Errorf("expected the dispatched tool to honour its arguments, got %+v", out)
+	}
+}
+
+func TestCallTool_RefusesWriteTools(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	// create_environment is registered and callable directly, but must not be
+	// reachable through call_tool, which hides the real tool name from the
+	// client and so escapes any per-tool approval prompt.
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "call_tool",
+		Arguments: map[string]any{"tool_name": "create_environment", "arguments": map[string]any{"name": "should-not-happen"}},
+	})
+	if err == nil && !result.IsError {
+		t.Fatal("expected call_tool to refuse a write tool")
+	}
+}
+
+func TestCallTool_RejectsUnknownTool(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "call_tool",
+		Arguments: map[string]any{"tool_name": "no_such_tool"},
+	})
+	if err == nil && !result.IsError {
+		t.Fatal("expected call_tool to reject an unknown tool")
 	}
 }

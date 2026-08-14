@@ -28,7 +28,7 @@ type GetCurrentTimeOutput struct {
 }
 
 func (a *App) registerGetCurrentTimeTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:         "get_current_time",
 		Description:  "Returns the current date and time so you never have to guess or infer it from your training data. Always returns UTC; pass an optional IANA timezone to also get the local time in that zone. Use this whenever you need to know the current time, for example to build relative time ranges for search_events.",
 		OutputSchema: schema.SchemaFromStruct(GetCurrentTimeOutput{}),

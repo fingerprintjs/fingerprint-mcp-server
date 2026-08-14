@@ -35,6 +35,7 @@ type App struct {
 	jwtPublicKey jwk.Key
 	version      string
 	appName      string
+	dispatch     []dispatchableTool
 }
 
 type opts struct {
@@ -704,6 +705,8 @@ var readOnlyTools = []string{
 	"list_environments",
 	"list_api_keys",
 	"get_api_key",
+	"list_tools",
+	"call_tool",
 }
 
 func (a *App) registerTools(ctx context.Context) error {
@@ -755,6 +758,17 @@ func (a *App) registerTools(ctx context.Context) error {
 
 	var errs []error
 	for _, c := range candidates {
+		if shouldRegister(c.name) {
+			errs = append(errs, c.register())
+		}
+	}
+
+	// Registered last so a.dispatch is fully populated and they sort to the end
+	// of the tool list.
+	for _, c := range []toolEntry{
+		{"list_tools", func() error { return a.registerListToolsTool(ctx) }},
+		{"call_tool", func() error { return a.registerCallToolTool(ctx) }},
+	} {
 		if shouldRegister(c.name) {
 			errs = append(errs, c.register())
 		}
