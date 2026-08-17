@@ -100,7 +100,7 @@ type CallToolInput struct {
 func (a *App) registerListToolsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "list_tools",
-		Description:  "Lists the read-only tools this server is serving right now. Use this when you are unsure which Fingerprint tools exist, or when a tool you expect is not in your available tools: your list can be out of date, and anything returned here can be run with call_tool. Pass tool_name to also get that tool's input schema.",
+		Description:  "Lists the read-only Fingerprint tools that call_tool can run, as this server is serving them right now. Use this when you are unsure which tools exist, or when a tool you expect is not in your available tools: your list can be out of date, and anything returned here can be run with call_tool. Pass tool_name to also get that tool's input schema.",
 		OutputSchema: schema.SchemaFromStruct(ListToolsOutput{}),
 		InputSchema:  schema.SchemaFromStruct(ListToolsInput{}),
 		Annotations: &mcp.ToolAnnotations{
