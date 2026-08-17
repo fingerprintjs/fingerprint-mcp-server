@@ -2027,6 +2027,20 @@ func TestCallTool_RunsDispatchedTool(t *testing.T) {
 	}
 }
 
+func toolErrorCode(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &body); err != nil {
+		t.Fatalf("expected a {code, message} error body, got %q", extractTextContent(t, result))
+	}
+	return body.Error.Code
+}
+
 func TestCallTool_RefusesWriteTools(t *testing.T) {
 	mgmtAPI := newMockManagementAPI()
 	defer mgmtAPI.close()
@@ -2042,12 +2056,15 @@ func TestCallTool_RefusesWriteTools(t *testing.T) {
 	// create_environment is registered and callable directly, but must not be
 	// reachable through call_tool, which hides the real tool name from the
 	// client and so escapes any per-tool approval prompt.
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "call_tool",
-		Arguments: map[string]any{"tool_name": "create_environment", "arguments": map[string]any{"name": "should-not-happen"}},
+	result := mustCallTool(t, session, "call_tool", map[string]any{
+		"tool_name": "create_environment",
+		"arguments": map[string]any{"name": "should-not-happen"},
 	})
-	if err == nil && !result.IsError {
+	if !result.IsError {
 		t.Fatal("expected call_tool to refuse a write tool")
+	}
+	if code := toolErrorCode(t, result); code != "tool_not_dispatchable" {
+		t.Errorf("expected tool_not_dispatchable, got %q", code)
 	}
 }
 
@@ -2055,11 +2072,48 @@ func TestCallTool_RejectsUnknownTool(t *testing.T) {
 	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
 	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
 
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "call_tool",
-		Arguments: map[string]any{"tool_name": "no_such_tool"},
-	})
-	if err == nil && !result.IsError {
+	result := mustCallTool(t, session, "call_tool", map[string]any{"tool_name": "no_such_tool"})
+	if !result.IsError {
 		t.Fatal("expected call_tool to reject an unknown tool")
+	}
+	if code := toolErrorCode(t, result); code != "tool_not_found" {
+		t.Errorf("expected tool_not_found, got %q", code)
+	}
+}
+
+func TestListToolsTool_ReturnsInputSchemaForWriteTool(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	// Write tools leave InputSchema unset and let AddTool infer it, so the
+	// listing has to derive it rather than read it back off the tool.
+	result := mustCallTool(t, session, "list_tools", map[string]any{"tool_name": "create_environment"})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+
+	var out ListToolsOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if len(out.Tools) != 1 {
+		t.Fatalf("expected one tool, got %v", out.Tools)
+	}
+	if out.Tools[0].Dispatchable {
+		t.Error("expected create_environment to be listed as not dispatchable")
+	}
+	if out.Tools[0].InputSchema == nil {
+		t.Fatal("expected an input schema for a write tool")
+	}
+	if _, ok := out.Tools[0].InputSchema["properties"]; !ok {
+		t.Errorf("expected the input schema to carry properties, got %v", out.Tools[0].InputSchema)
 	}
 }

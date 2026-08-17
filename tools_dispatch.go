@@ -3,7 +3,6 @@ package fpmcpserver
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -26,6 +25,17 @@ type registeredTool struct {
 	call        func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error)
 }
 
+// inputSchemaFor returns the schema list_tools should report. A tool may leave
+// InputSchema unset and let AddTool infer it from In, but AddTool infers into
+// its own copy, so reading it back off the caller's tool yields nothing.
+func inputSchemaFor[In any](t *mcp.Tool) any {
+	if t.InputSchema != nil {
+		return t.InputSchema
+	}
+	var zero In
+	return schema.SchemaFromStruct(zero)
+}
+
 // addTool registers a tool and makes it reachable through call_tool. Only
 // read-only tools belong here: call_tool hides the real tool name from the
 // client, so anything routed through it escapes per-tool approval prompts.
@@ -35,7 +45,7 @@ func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	a.tools = append(a.tools, registeredTool{
 		name:        t.Name,
 		description: t.Description,
-		inputSchema: t.InputSchema,
+		inputSchema: inputSchemaFor[In](t),
 		call: func(ctx context.Context, req *mcp.CallToolRequest, args json.RawMessage) (*mcp.CallToolResult, error) {
 			var in In
 			if len(args) > 0 {
@@ -80,13 +90,32 @@ func addWriteTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out
 	a.tools = append(a.tools, registeredTool{
 		name:        t.Name,
 		description: t.Description,
-		inputSchema: t.InputSchema,
+		inputSchema: inputSchemaFor[In](t),
 	})
 }
 
-func (a *App) lookupDispatchable(name string) *registeredTool {
+// toolError reports a refusal as a tool result rather than a protocol error.
+// A protocol error reaches the model as its client's generic failure text, so
+// "you may not run this" would read the same as "this tool is broken". The
+// {code, message} shape matches what the Fingerprint API returns, so a caller
+// can read a dispatch failure the same way it reads an upstream one.
+func toolError(code, format string, args ...any) (*mcp.CallToolResult, error) {
+	message := fmt.Sprintf(format, args...)
+	body, err := json.Marshal(map[string]any{
+		"error": map[string]string{"code": code, "message": message},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s", code, message)
+	}
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: string(body)}},
+	}, nil
+}
+
+func (a *App) lookupTool(name string) *registeredTool {
 	for i := range a.tools {
-		if a.tools[i].name == name && a.tools[i].call != nil {
+		if a.tools[i].name == name {
 			return &a.tools[i]
 		}
 	}
@@ -172,23 +201,26 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 		var input CallToolInput
 		if len(req.Params.Arguments) > 0 {
 			if err := json.Unmarshal(req.Params.Arguments, &input); err != nil {
-				return nil, fmt.Errorf("invalid arguments: %w", err)
+				return toolError("invalid_arguments", "could not read the arguments: %v", err)
 			}
 		}
 		if input.ToolName == "" {
-			return nil, errors.New("tool_name is required")
+			return toolError("invalid_arguments", "tool_name is required")
 		}
 
-		target := a.lookupDispatchable(input.ToolName)
-		if target == nil {
-			return nil, fmt.Errorf("%q cannot be run with call_tool: call list_tools to see which tools are dispatchable, and call the others directly", input.ToolName)
+		target := a.lookupTool(input.ToolName)
+		switch {
+		case target == nil:
+			return toolError("tool_not_found", "%q is not a tool on this server: call list_tools to see what is available", input.ToolName)
+		case target.call == nil:
+			return toolError("tool_not_dispatchable", "%q changes state, so it cannot be run through call_tool: call it directly, and if it is missing from your available tools, start a new conversation to pick it up", input.ToolName)
 		}
 
 		var args json.RawMessage
 		if input.Arguments != nil {
 			encoded, err := json.Marshal(input.Arguments)
 			if err != nil {
-				return nil, fmt.Errorf("invalid arguments for %s: %w", input.ToolName, err)
+				return toolError("invalid_arguments", "could not read the arguments for %s: %v", input.ToolName, err)
 			}
 			args = encoded
 		}
