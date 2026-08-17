@@ -120,7 +120,7 @@ func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestE
 
 func (a *App) registerGetEventTool(_ context.Context) error {
 	// Register the get_event tool
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:         "get_event",
 		Description:  "Retrieves detailed information about a specific identification event from Fingerprint using its event_id. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
 		OutputSchema: getEventOutputSchema,
@@ -158,7 +158,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 
 func (a *App) registerSearchEventsTool(_ context.Context) error {
 	// Register the search_events tool
-	mcp.AddTool(a.server, &mcp.Tool{
+	addTool(a, &mcp.Tool{
 		Name:         "search_events",
 		Description:  "Retrieves detailed information about events matching provided criteria. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
 		OutputSchema: searchEventsOutputSchema,
