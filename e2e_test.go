@@ -1957,9 +1957,22 @@ func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 
 	wantRead := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
 	wantWrite := []string{"create_environment", "update_environment", "delete_environment", "create_api_key", "update_api_key", "delete_api_key"}
+	// The proxies list themselves so a conversation whose catalog predates one
+	// can still discover it exists.
+	wantDirect := []string{"list_tools", "call_tool", "call_write_tool"}
 
-	if len(out.Tools) != len(wantRead)+len(wantWrite) {
-		t.Errorf("expected %d tools listed, got %d: %v", len(wantRead)+len(wantWrite), len(out.Tools), out.Tools)
+	if len(out.Tools) != len(wantRead)+len(wantWrite)+len(wantDirect) {
+		t.Errorf("expected %d tools listed, got %d: %v", len(wantRead)+len(wantWrite)+len(wantDirect), len(out.Tools), toolNamesFromListing(out))
+	}
+	for _, name := range wantDirect {
+		tool, ok := listed[name]
+		if !ok {
+			t.Errorf("expected proxy %q to be listed", name)
+			continue
+		}
+		if tool.RunWith != "direct" {
+			t.Errorf("expected proxy %q to be run_with direct, got %q", name, tool.RunWith)
+		}
 	}
 	for _, name := range wantRead {
 		tool, ok := listed[name]
@@ -2187,5 +2200,26 @@ func TestCallWriteTool_NotRegisteredWithoutWriteTools(t *testing.T) {
 	}
 	if names := toolNames(result); slices.Contains(names, "call_write_tool") {
 		t.Errorf("expected no call_write_tool when nothing mutating is registered, got %v", names)
+	}
+}
+
+func toolNamesFromListing(out ListToolsOutput) []string {
+	names := make([]string, 0, len(out.Tools))
+	for _, tool := range out.Tools {
+		names = append(names, tool.Name)
+	}
+	return names
+}
+
+func TestCallTool_RefusesProxies(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{AuthToken: defaultAuthToken})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "call_tool", map[string]any{"tool_name": "list_tools"})
+	if !result.IsError {
+		t.Fatal("expected call_tool to refuse proxying another proxy")
+	}
+	if code := toolErrorCode(t, result); code != "tool_must_be_called_directly" {
+		t.Errorf("expected tool_must_be_called_directly, got %q", code)
 	}
 }
