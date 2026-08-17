@@ -765,10 +765,15 @@ func (a *App) registerTools(ctx context.Context) error {
 
 	// Registered last so a.dispatch is fully populated and they sort to the end
 	// of the tool list.
-	for _, c := range []toolEntry{
+	proxies := []toolEntry{
 		{"list_tools", func() error { return a.registerListToolsTool(ctx) }},
 		{"call_tool", func() error { return a.registerCallToolTool(ctx) }},
-	} {
+	}
+	// Only worth serving when there is something for it to run.
+	if slices.ContainsFunc(a.tools, func(t registeredTool) bool { return t.mutating }) {
+		proxies = append(proxies, toolEntry{"call_write_tool", func() error { return a.registerCallWriteToolTool(ctx) }})
+	}
+	for _, c := range proxies {
 		if shouldRegister(c.name) {
 			errs = append(errs, c.register())
 		}

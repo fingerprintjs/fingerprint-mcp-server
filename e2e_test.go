@@ -48,8 +48,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 14 {
-		t.Errorf("expected 14 tools, got %d: %v", len(names), names)
+	if len(names) != 15 {
+		t.Errorf("expected 15 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 		"get_current_time",
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
-		"list_tools", "call_tool",
+		"list_tools", "call_tool", "call_write_tool",
 	}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
@@ -267,8 +267,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 14 {
-		t.Errorf("expected 14 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 15 {
+		t.Errorf("expected 15 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -284,8 +284,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 14 {
-		t.Errorf("expected 14 tools, got %d: %v", len(names), names)
+	if len(names) != 15 {
+		t.Errorf("expected 15 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -311,8 +311,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 14 {
-		t.Errorf("expected 14 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 15 {
+		t.Errorf("expected 15 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -1924,7 +1924,7 @@ func TestSessionID_RejectsValuesOutsideTheSpec(t *testing.T) {
 
 // --- Group: list_tools / call_tool ---
 
-func TestListToolsTool_ListsWriteToolsAsNotDispatchable(t *testing.T) {
+func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
 	mgmtAPI := newMockManagementAPI()
@@ -1950,29 +1950,35 @@ func TestListToolsTool_ListsWriteToolsAsNotDispatchable(t *testing.T) {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
-	dispatchable := map[string]bool{}
+	listed := map[string]ListedTool{}
 	for _, tool := range out.Tools {
-		dispatchable[tool.Name] = tool.Dispatchable
+		listed[tool.Name] = tool
 	}
 
-	wantDispatchable := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
-	wantListedOnly := []string{"create_environment", "update_environment", "delete_environment", "create_api_key", "update_api_key", "delete_api_key"}
+	wantRead := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	wantWrite := []string{"create_environment", "update_environment", "delete_environment", "create_api_key", "update_api_key", "delete_api_key"}
 
-	if len(out.Tools) != len(wantDispatchable)+len(wantListedOnly) {
-		t.Errorf("expected %d tools listed, got %d: %v", len(wantDispatchable)+len(wantListedOnly), len(out.Tools), out.Tools)
+	if len(out.Tools) != len(wantRead)+len(wantWrite) {
+		t.Errorf("expected %d tools listed, got %d: %v", len(wantRead)+len(wantWrite), len(out.Tools), out.Tools)
 	}
-	for _, name := range wantDispatchable {
-		if d, ok := dispatchable[name]; !ok {
+	for _, name := range wantRead {
+		tool, ok := listed[name]
+		if !ok {
 			t.Errorf("expected %q to be listed", name)
-		} else if !d {
-			t.Errorf("expected %q to be dispatchable", name)
+			continue
+		}
+		if tool.Mutating || tool.RunWith != "call_tool" {
+			t.Errorf("expected %q to be read-only and run with call_tool, got mutating=%v run_with=%q", name, tool.Mutating, tool.RunWith)
 		}
 	}
-	for _, name := range wantListedOnly {
-		if d, ok := dispatchable[name]; !ok {
+	for _, name := range wantWrite {
+		tool, ok := listed[name]
+		if !ok {
 			t.Errorf("expected write tool %q to be listed", name)
-		} else if d {
-			t.Errorf("expected write tool %q to be listed but not dispatchable", name)
+			continue
+		}
+		if !tool.Mutating || tool.RunWith != "call_write_tool" {
+			t.Errorf("expected %q to be mutating and run with call_write_tool, got mutating=%v run_with=%q", name, tool.Mutating, tool.RunWith)
 		}
 	}
 	for _, tool := range out.Tools {
@@ -2063,8 +2069,8 @@ func TestCallTool_RefusesWriteTools(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("expected call_tool to refuse a write tool")
 	}
-	if code := toolErrorCode(t, result); code != "tool_not_dispatchable" {
-		t.Errorf("expected tool_not_dispatchable, got %q", code)
+	if code := toolErrorCode(t, result); code != "tool_is_mutating" {
+		t.Errorf("expected tool_is_mutating, got %q", code)
 	}
 }
 
@@ -2107,13 +2113,79 @@ func TestListToolsTool_ReturnsInputSchemaForWriteTool(t *testing.T) {
 	if len(out.Tools) != 1 {
 		t.Fatalf("expected one tool, got %v", out.Tools)
 	}
-	if out.Tools[0].Dispatchable {
-		t.Error("expected create_environment to be listed as not dispatchable")
+	if !out.Tools[0].Mutating || out.Tools[0].RunWith != "call_write_tool" {
+		t.Errorf("expected create_environment to be mutating and run with call_write_tool, got %+v", out.Tools[0])
 	}
 	if out.Tools[0].InputSchema == nil {
 		t.Fatal("expected an input schema for a write tool")
 	}
 	if _, ok := out.Tools[0].InputSchema["properties"]; !ok {
 		t.Errorf("expected the input schema to carry properties, got %v", out.Tools[0].InputSchema)
+	}
+}
+
+func TestCallWriteTool_RunsWriteTool(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "call_write_tool", map[string]any{
+		"tool_name": "create_environment",
+		"arguments": map[string]any{"name": "dispatched-env"},
+	})
+	if result.IsError {
+		t.Fatalf("expected the write proxy to dispatch, got error: %v", extractTextContent(t, result))
+	}
+}
+
+func TestCallWriteTool_RefusesReadOnlyTools(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "call_write_tool", map[string]any{"tool_name": "get_current_time"})
+	if !result.IsError {
+		t.Fatal("expected call_write_tool to refuse a read-only tool")
+	}
+	if code := toolErrorCode(t, result); code != "tool_is_read_only" {
+		t.Errorf("expected tool_is_read_only, got %q", code)
+	}
+}
+
+func TestCallWriteTool_NotRegisteredWithoutWriteTools(t *testing.T) {
+	fpAPI := newMockFingerprintAPI()
+	defer fpAPI.close()
+
+	// Read-only mode registers no mutating tools, so the write proxy has
+	// nothing to run and must not be offered.
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:    defaultAuthToken,
+		ServerAPIKey: "test-server-key",
+		ServerAPIURL: fpAPI.server.URL + "/v4",
+		Region:       "us",
+		ReadOnly:     true,
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+	if names := toolNames(result); slices.Contains(names, "call_write_tool") {
+		t.Errorf("expected no call_write_tool when nothing mutating is registered, got %v", names)
 	}
 }

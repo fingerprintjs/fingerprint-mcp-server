@@ -22,6 +22,7 @@ type registeredTool struct {
 	name        string
 	description string
 	inputSchema any
+	mutating    bool
 	call        func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error)
 }
 
@@ -36,9 +37,44 @@ func inputSchemaFor[In any](t *mcp.Tool) any {
 	return schema.SchemaFromStruct(zero)
 }
 
-// addTool registers a tool and makes it reachable through call_tool. Only
-// read-only tools belong here: call_tool hides the real tool name from the
-// client, so anything routed through it escapes per-tool approval prompts.
+// dispatchFunc adapts a typed handler so a proxy can invoke it from raw JSON,
+// reproducing what AddTool does with the handler's output.
+func dispatchFunc[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, args json.RawMessage) (*mcp.CallToolResult, error) {
+		var in In
+		if len(args) > 0 {
+			if err := json.Unmarshal(args, &in); err != nil {
+				return toolError("invalid_arguments", "could not read the arguments for %s: %v", name, err)
+			}
+		}
+
+		res, out, err := h(ctx, req, in)
+		if err != nil {
+			var errRes mcp.CallToolResult
+			errRes.SetError(err)
+			return &errRes, nil
+		}
+		if res == nil {
+			res = &mcp.CallToolResult{}
+		}
+
+		v := reflect.ValueOf(out)
+		if !v.IsValid() || (v.Kind() == reflect.Pointer && v.IsNil()) {
+			return res, nil
+		}
+		outJSON, err := json.Marshal(out)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling %s output: %w", name, err)
+		}
+		res.StructuredContent = json.RawMessage(outJSON)
+		if res.Content == nil {
+			res.Content = []mcp.Content{&mcp.TextContent{Text: string(outJSON)}}
+		}
+		return res, nil
+	}
+}
+
+// addTool registers a read-only tool, reachable through call_tool.
 func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(a.server, t, h)
 
@@ -46,44 +82,14 @@ func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 		name:        t.Name,
 		description: t.Description,
 		inputSchema: inputSchemaFor[In](t),
-		call: func(ctx context.Context, req *mcp.CallToolRequest, args json.RawMessage) (*mcp.CallToolResult, error) {
-			var in In
-			if len(args) > 0 {
-				if err := json.Unmarshal(args, &in); err != nil {
-					return nil, fmt.Errorf("invalid arguments for %s: %w", t.Name, err)
-				}
-			}
-
-			res, out, err := h(ctx, req, in)
-			if err != nil {
-				var errRes mcp.CallToolResult
-				errRes.SetError(err)
-				return &errRes, nil
-			}
-			if res == nil {
-				res = &mcp.CallToolResult{}
-			}
-
-			v := reflect.ValueOf(out)
-			if !v.IsValid() || (v.Kind() == reflect.Pointer && v.IsNil()) {
-				return res, nil
-			}
-			outJSON, err := json.Marshal(out)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling %s output: %w", t.Name, err)
-			}
-			res.StructuredContent = json.RawMessage(outJSON)
-			if res.Content == nil {
-				res.Content = []mcp.Content{&mcp.TextContent{Text: string(outJSON)}}
-			}
-			return res, nil
-		},
+		call:        dispatchFunc(t.Name, h),
 	})
 }
 
-// addWriteTool registers a tool that changes state. list_tools reports it so a
-// client can tell it exists, but call_tool will not run it: proxying a write
-// would hide the real tool name from the client and skip its approval prompt.
+// addWriteTool registers a tool that changes state. It is reachable through
+// call_write_tool but never through call_tool: annotations are per tool, and a
+// proxy that ran both could not be honestly annotated for either, so a client
+// auto-approving read-only tools would end up auto-running mutations.
 func addWriteTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(a.server, t, h)
 
@@ -91,6 +97,8 @@ func addWriteTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out
 		name:        t.Name,
 		description: t.Description,
 		inputSchema: inputSchemaFor[In](t),
+		mutating:    true,
+		call:        dispatchFunc(t.Name, h),
 	})
 }
 
@@ -113,6 +121,13 @@ func toolError(code, format string, args ...any) (*mcp.CallToolResult, error) {
 	}, nil
 }
 
+func proxyFor(mutating bool) string {
+	if mutating {
+		return "call_write_tool"
+	}
+	return "call_tool"
+}
+
 func (a *App) lookupTool(name string) *registeredTool {
 	for i := range a.tools {
 		if a.tools[i].name == name {
@@ -127,10 +142,11 @@ type ListToolsInput struct {
 }
 
 type ListedTool struct {
-	Name         string         `json:"name" jsonschema:"Tool name"`
-	Description  string         `json:"description" jsonschema:"What the tool does"`
-	Dispatchable bool           `json:"dispatchable" jsonschema:"Whether call_tool can run this tool. Tools that change state are not dispatchable and have to be called directly, so if one is missing from your available tools, start a new conversation to pick it up."`
-	InputSchema  map[string]any `json:"input_schema,omitempty" jsonschema:"JSON Schema for the tool's arguments, included only when tool_name was set"`
+	Name        string         `json:"name" jsonschema:"Tool name"`
+	Description string         `json:"description" jsonschema:"What the tool does"`
+	Mutating    bool           `json:"mutating" jsonschema:"Whether the tool changes state. Confirm with the user before running one of these."`
+	RunWith     string         `json:"run_with" jsonschema:"Which proxy runs this tool: call_tool for read-only tools, call_write_tool for tools that change state."`
+	InputSchema map[string]any `json:"input_schema,omitempty" jsonschema:"JSON Schema for the tool's arguments, included only when tool_name was set"`
 }
 
 type ListToolsOutput struct {
@@ -138,14 +154,14 @@ type ListToolsOutput struct {
 }
 
 type CallToolInput struct {
-	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools with dispatchable true"`
+	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
 	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
 }
 
 func (a *App) registerListToolsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "list_tools",
-		Description:  "Lists the Fingerprint tools this server is serving right now. Use this when you are unsure which tools exist, or when a tool you expect is not in your available tools: your list can be out of date. Tools marked dispatchable can be run with call_tool. Pass tool_name to also get that tool's input schema.",
+		Description:  "Lists the Fingerprint tools this server is serving right now. Use this when you are unsure which tools exist, or when a tool you expect is not in your available tools: your list can be out of date. Each tool names the proxy that runs it in run_with. Pass tool_name to also get that tool's input schema.",
 		OutputSchema: schema.SchemaFromStruct(ListToolsOutput{}),
 		InputSchema:  schema.SchemaFromStruct(ListToolsInput{}),
 		Annotations: &mcp.ToolAnnotations{
@@ -161,7 +177,7 @@ func (a *App) registerListToolsTool(_ context.Context) error {
 			if input.ToolName != "" && t.name != input.ToolName {
 				continue
 			}
-			listed := ListedTool{Name: t.name, Description: t.description, Dispatchable: t.call != nil}
+			listed := ListedTool{Name: t.name, Description: t.description, Mutating: t.mutating, RunWith: proxyFor(t.mutating)}
 			if input.ToolName != "" && t.inputSchema != nil {
 				encoded, err := json.Marshal(t.inputSchema)
 				if err != nil {
@@ -212,8 +228,64 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 		switch {
 		case target == nil:
 			return toolError("tool_not_found", "%q is not a tool on this server: call list_tools to see what is available", input.ToolName)
-		case target.call == nil:
-			return toolError("tool_not_dispatchable", "%q changes state, so it cannot be run through call_tool: call it directly, and if it is missing from your available tools, start a new conversation to pick it up", input.ToolName)
+		case target.mutating:
+			return toolError("tool_is_mutating", "%q changes state, so it cannot be run through call_tool: use call_write_tool, which asks for your approval first", input.ToolName)
+		}
+
+		var args json.RawMessage
+		if input.Arguments != nil {
+			encoded, err := json.Marshal(input.Arguments)
+			if err != nil {
+				return toolError("invalid_arguments", "could not read the arguments for %s: %v", input.ToolName, err)
+			}
+			args = encoded
+		}
+
+		return target.call(ctx, req, args)
+	})
+
+	return nil
+}
+
+type CallWriteToolInput struct {
+	ToolName  string         `json:"tool_name" jsonschema:"Name of the state-changing tool to run, as returned by list_tools with mutating true"`
+	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
+}
+
+// registerCallWriteToolTool exists because annotations are per tool. call_tool
+// is annotated read-only so clients can treat it as safe; routing writes
+// through it would make that a lie. A separate proxy can be annotated
+// destructive, so a client's approval policy stays accurate and an "always
+// allow" on reads never silently covers a mutation.
+func (a *App) registerCallWriteToolTool(_ context.Context) error {
+	a.server.AddTool(&mcp.Tool{
+		Name:        "call_write_tool",
+		Description: "Runs one of this server's state-changing tools by name. Use this when list_tools reports a tool with mutating true that is not in your own list of available tools. Confirm with the user before calling this, and pass arguments matching the tool's input schema from list_tools.",
+		InputSchema: schema.SchemaFromStruct(CallWriteToolInput{}),
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(true),
+			IdempotentHint:  false,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Call Write Tool",
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var input CallWriteToolInput
+		if len(req.Params.Arguments) > 0 {
+			if err := json.Unmarshal(req.Params.Arguments, &input); err != nil {
+				return toolError("invalid_arguments", "could not read the arguments: %v", err)
+			}
+		}
+		if input.ToolName == "" {
+			return toolError("invalid_arguments", "tool_name is required")
+		}
+
+		target := a.lookupTool(input.ToolName)
+		switch {
+		case target == nil:
+			return toolError("tool_not_found", "%q is not a tool on this server: call list_tools to see what is available", input.ToolName)
+		case !target.mutating:
+			return toolError("tool_is_read_only", "%q does not change state, so run it with call_tool instead", input.ToolName)
 		}
 
 		var args json.RawMessage
