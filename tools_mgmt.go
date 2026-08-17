@@ -241,7 +241,7 @@ func (a *App) registerUpdateEnvironmentTool(_ context.Context) error {
 }
 
 func (a *App) registerDeleteEnvironmentTool(_ context.Context) error {
-	addWriteTool(a, &mcp.Tool{
+	addDirectTool(a, &mcp.Tool{
 		Name:        "delete_environment",
 		Description: "Deletes a workspace environment. You can only delete environments that don't have any active API keys associated with them.",
 		Annotations: &mcp.ToolAnnotations{
@@ -435,7 +435,7 @@ func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
 }
 
 func (a *App) registerDeleteAPIKeyTool(_ context.Context) error {
-	addWriteTool(a, &mcp.Tool{
+	addDirectTool(a, &mcp.Tool{
 		Name:        "delete_api_key",
 		Description: "Deletes an API key. This operation is irreversible.",
 		Annotations: &mcp.ToolAnnotations{

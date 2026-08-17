@@ -770,7 +770,7 @@ func (a *App) registerTools(ctx context.Context) error {
 		{"call_tool", func() error { return a.registerCallToolTool(ctx) }},
 	}
 	// Only worth serving when there is something for it to run.
-	if slices.ContainsFunc(a.tools, func(t registeredTool) bool { return t.mutating }) {
+	if slices.ContainsFunc(a.tools, func(t registeredTool) bool { return t.mutating && t.call != nil }) {
 		proxies = append(proxies, toolEntry{"call_write_tool", func() error { return a.registerCallWriteToolTool(ctx) }})
 	}
 	for _, c := range proxies {

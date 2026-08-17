@@ -1956,10 +1956,10 @@ func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 	}
 
 	wantRead := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
-	wantWrite := []string{"create_environment", "update_environment", "delete_environment", "create_api_key", "update_api_key", "delete_api_key"}
-	// The proxies list themselves so a conversation whose catalog predates one
-	// can still discover it exists.
-	wantDirect := []string{"list_tools", "call_tool", "call_write_tool"}
+	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key"}
+	// Deletes are listed but never proxied, and the proxies list themselves so a
+	// conversation whose catalog predates one can still discover it exists.
+	wantDirect := []string{"delete_environment", "delete_api_key", "list_tools", "call_tool", "call_write_tool"}
 
 	if len(out.Tools) != len(wantRead)+len(wantWrite)+len(wantDirect) {
 		t.Errorf("expected %d tools listed, got %d: %v", len(wantRead)+len(wantWrite)+len(wantDirect), len(out.Tools), toolNamesFromListing(out))
@@ -2222,4 +2222,72 @@ func TestCallTool_RefusesProxies(t *testing.T) {
 	if code := toolErrorCode(t, result); code != "tool_must_be_called_directly" {
 		t.Errorf("expected tool_must_be_called_directly, got %q", code)
 	}
+}
+
+func TestListToolsTool_FallsBackToDirectWhenProxyNotServed(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	// A deploy can serve a mutating tool without serving call_write_tool, and
+	// naming a proxy that is not registered would send the model nowhere.
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+		Tools:            []string{"create_api_key", "list_tools", "call_tool"},
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	if names := toolNames(mustListTools(t, session)); slices.Contains(names, "call_write_tool") {
+		t.Fatalf("expected call_write_tool not to be served, got %v", names)
+	}
+
+	result := mustCallTool(t, session, "list_tools", map[string]any{"tool_name": "create_api_key"})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", extractTextContent(t, result))
+	}
+	var out ListToolsOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &out); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if len(out.Tools) != 1 {
+		t.Fatalf("expected one tool, got %v", out.Tools)
+	}
+	if out.Tools[0].RunWith != "direct" {
+		t.Errorf("expected run_with direct when call_write_tool is not served, got %q", out.Tools[0].RunWith)
+	}
+}
+
+func TestCallWriteTool_RefusesDeleteTools(t *testing.T) {
+	mgmtAPI := newMockManagementAPI()
+	defer mgmtAPI.close()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:        defaultAuthToken,
+		ManagementAPIKey: "test-mgmt-key",
+		ManagementAPIURL: mgmtAPI.server.URL,
+		Region:           "us",
+	})
+	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
+
+	result := mustCallTool(t, session, "call_write_tool", map[string]any{
+		"tool_name": "delete_api_key",
+		"arguments": map[string]any{"id": "should-not-happen"},
+	})
+	if !result.IsError {
+		t.Fatal("expected call_write_tool to refuse a delete tool")
+	}
+	if code := toolErrorCode(t, result); code != "tool_must_be_called_directly" {
+		t.Errorf("expected tool_must_be_called_directly, got %q", code)
+	}
+}
+
+func mustListTools(t *testing.T, session *mcp.ClientSession) *mcp.ListToolsResult {
+	t.Helper()
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+	return result
 }

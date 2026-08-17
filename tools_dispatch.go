@@ -86,6 +86,20 @@ func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	})
 }
 
+// addDirectTool registers a tool that is listed but never proxied. Deletes live
+// here: one "always allow" on call_write_tool would otherwise cover every write
+// tool behind it, and an irreversible one should still cost a decision.
+func addDirectTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	mcp.AddTool(a.server, t, h)
+
+	a.tools = append(a.tools, registeredTool{
+		name:        t.Name,
+		description: t.Description,
+		inputSchema: inputSchemaFor[In](t),
+		mutating:    true,
+	})
+}
+
 // addWriteTool registers a tool that changes state. It is reachable through
 // call_write_tool but never through call_tool: annotations are per tool, and a
 // proxy that ran both could not be honestly annotated for either, so a client
@@ -134,15 +148,19 @@ func (a *App) addProxy(t *mcp.Tool, mutating bool) {
 	})
 }
 
-func runWith(t registeredTool) string {
-	switch {
-	case t.call == nil:
-		return "direct"
-	case t.mutating:
-		return "call_write_tool"
-	default:
-		return "call_tool"
+// runWith names the route a caller should actually take. The proxies are
+// themselves gated by MCP_TOOLS, so a deploy can serve a mutating tool without
+// serving call_write_tool. Naming an unregistered proxy would point the model
+// at a route that cannot resolve, so fall back to direct.
+func (a *App) runWith(t registeredTool) string {
+	proxy := "call_tool"
+	if t.mutating {
+		proxy = "call_write_tool"
 	}
+	if t.call == nil || a.lookupTool(proxy) == nil {
+		return "direct"
+	}
+	return proxy
 }
 
 func (a *App) lookupTool(name string) *registeredTool {
@@ -196,7 +214,7 @@ func (a *App) registerListToolsTool(_ context.Context) error {
 			if input.ToolName != "" && t.name != input.ToolName {
 				continue
 			}
-			listed := ListedTool{Name: t.name, Description: t.description, Mutating: t.mutating, RunWith: runWith(t)}
+			listed := ListedTool{Name: t.name, Description: t.description, Mutating: t.mutating, RunWith: a.runWith(t)}
 			if input.ToolName != "" && t.inputSchema != nil {
 				encoded, err := json.Marshal(t.inputSchema)
 				if err != nil {
@@ -210,7 +228,8 @@ func (a *App) registerListToolsTool(_ context.Context) error {
 		}
 
 		if input.ToolName != "" && len(out.Tools) == 0 {
-			return nil, nil, fmt.Errorf("unknown tool %q: call list_tools without tool_name to see what is available", input.ToolName)
+			res, err := toolError("tool_not_found", "%q is not a tool on this server: call list_tools without tool_name to see what is available", input.ToolName)
+			return res, nil, err
 		}
 		return nil, out, nil
 	})
