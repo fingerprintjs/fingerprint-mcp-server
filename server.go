@@ -35,7 +35,7 @@ type App struct {
 	jwtPublicKey jwk.Key
 	version      string
 	appName      string
-	dispatch     []dispatchableTool
+	tools        []registeredTool
 }
 
 type opts struct {

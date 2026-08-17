@@ -163,7 +163,7 @@ func (a *App) registerListEnvironmentsTool(_ context.Context) error {
 }
 
 func (a *App) registerCreateEnvironmentTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "create_environment",
 		Description: "Creates a new workspace environment. Requires a name (3-255 chars). Optionally set description, limit mode (none/restrict/notify), and limit value. For schema, see mcp resource fingerprint://schemas/environment",
 		Annotations: &mcp.ToolAnnotations{
@@ -202,7 +202,7 @@ func (a *App) registerCreateEnvironmentTool(_ context.Context) error {
 }
 
 func (a *App) registerUpdateEnvironmentTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "update_environment",
 		Description: "Updates an existing workspace environment. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/environment",
 		Annotations: &mcp.ToolAnnotations{
@@ -241,7 +241,7 @@ func (a *App) registerUpdateEnvironmentTool(_ context.Context) error {
 }
 
 func (a *App) registerDeleteEnvironmentTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "delete_environment",
 		Description: "Deletes a workspace environment. You can only delete environments that don't have any active API keys associated with them.",
 		Annotations: &mcp.ToolAnnotations{
@@ -354,7 +354,7 @@ func (a *App) registerGetAPIKeyTool(_ context.Context) error {
 }
 
 func (a *App) registerCreateAPIKeyTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "create_api_key",
 		Description: "Creates a new API key. Requires type (public/secret/proxy) and name (3-255 chars). Secret key tokens are only visible at creation time. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{
@@ -396,7 +396,7 @@ func (a *App) registerCreateAPIKeyTool(_ context.Context) error {
 }
 
 func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "update_api_key",
 		Description: "Updates an existing API key. Can change name, description, status (enabled/disabled), and rate limit. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{
@@ -435,7 +435,7 @@ func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
 }
 
 func (a *App) registerDeleteAPIKeyTool(_ context.Context) error {
-	mcp.AddTool(a.server, &mcp.Tool{
+	addWriteTool(a, &mcp.Tool{
 		Name:        "delete_api_key",
 		Description: "Deletes an API key. This operation is irreversible.",
 		Annotations: &mcp.ToolAnnotations{

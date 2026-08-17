@@ -17,7 +17,9 @@ import (
 // Dispatch is not bound that way: a tool missing from the catalog is still
 // callable by name. list_tools and call_tool never change, so they stay in
 // every catalog and keep the current tool surface reachable through them.
-type dispatchableTool struct {
+//
+// call is nil for tools call_tool must not run.
+type registeredTool struct {
 	name        string
 	description string
 	inputSchema any
@@ -30,7 +32,7 @@ type dispatchableTool struct {
 func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(a.server, t, h)
 
-	a.dispatch = append(a.dispatch, dispatchableTool{
+	a.tools = append(a.tools, registeredTool{
 		name:        t.Name,
 		description: t.Description,
 		inputSchema: t.InputSchema,
@@ -69,10 +71,23 @@ func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	})
 }
 
-func (a *App) lookupDispatchable(name string) *dispatchableTool {
-	for i := range a.dispatch {
-		if a.dispatch[i].name == name {
-			return &a.dispatch[i]
+// addWriteTool registers a tool that changes state. list_tools reports it so a
+// client can tell it exists, but call_tool will not run it: proxying a write
+// would hide the real tool name from the client and skip its approval prompt.
+func addWriteTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	mcp.AddTool(a.server, t, h)
+
+	a.tools = append(a.tools, registeredTool{
+		name:        t.Name,
+		description: t.Description,
+		inputSchema: t.InputSchema,
+	})
+}
+
+func (a *App) lookupDispatchable(name string) *registeredTool {
+	for i := range a.tools {
+		if a.tools[i].name == name && a.tools[i].call != nil {
+			return &a.tools[i]
 		}
 	}
 	return nil
@@ -83,24 +98,25 @@ type ListToolsInput struct {
 }
 
 type ListedTool struct {
-	Name        string         `json:"name" jsonschema:"Tool name to pass to call_tool"`
-	Description string         `json:"description" jsonschema:"What the tool does"`
-	InputSchema map[string]any `json:"input_schema,omitempty" jsonschema:"JSON Schema for the tool's arguments, included only when tool_name was set"`
+	Name         string         `json:"name" jsonschema:"Tool name"`
+	Description  string         `json:"description" jsonschema:"What the tool does"`
+	Dispatchable bool           `json:"dispatchable" jsonschema:"Whether call_tool can run this tool. Tools that change state are not dispatchable and have to be called directly, so if one is missing from your available tools, start a new conversation to pick it up."`
+	InputSchema  map[string]any `json:"input_schema,omitempty" jsonschema:"JSON Schema for the tool's arguments, included only when tool_name was set"`
 }
 
 type ListToolsOutput struct {
-	Tools []ListedTool `json:"tools" jsonschema:"Read-only tools this server is currently serving"`
+	Tools []ListedTool `json:"tools" jsonschema:"Tools this server is serving right now"`
 }
 
 type CallToolInput struct {
-	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
+	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools with dispatchable true"`
 	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
 }
 
 func (a *App) registerListToolsTool(_ context.Context) error {
 	mcp.AddTool(a.server, &mcp.Tool{
 		Name:         "list_tools",
-		Description:  "Lists the read-only Fingerprint tools that call_tool can run, as this server is serving them right now. Use this when you are unsure which tools exist, or when a tool you expect is not in your available tools: your list can be out of date, and anything returned here can be run with call_tool. Pass tool_name to also get that tool's input schema.",
+		Description:  "Lists the Fingerprint tools this server is serving right now. Use this when you are unsure which tools exist, or when a tool you expect is not in your available tools: your list can be out of date. Tools marked dispatchable can be run with call_tool. Pass tool_name to also get that tool's input schema.",
 		OutputSchema: schema.SchemaFromStruct(ListToolsOutput{}),
 		InputSchema:  schema.SchemaFromStruct(ListToolsInput{}),
 		Annotations: &mcp.ToolAnnotations{
@@ -111,12 +127,12 @@ func (a *App) registerListToolsTool(_ context.Context) error {
 			Title:           "List Tools",
 		},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input ListToolsInput) (*mcp.CallToolResult, *ListToolsOutput, error) {
-		out := &ListToolsOutput{Tools: make([]ListedTool, 0, len(a.dispatch))}
-		for _, t := range a.dispatch {
+		out := &ListToolsOutput{Tools: make([]ListedTool, 0, len(a.tools))}
+		for _, t := range a.tools {
 			if input.ToolName != "" && t.name != input.ToolName {
 				continue
 			}
-			listed := ListedTool{Name: t.name, Description: t.description}
+			listed := ListedTool{Name: t.name, Description: t.description, Dispatchable: t.call != nil}
 			if input.ToolName != "" && t.inputSchema != nil {
 				encoded, err := json.Marshal(t.inputSchema)
 				if err != nil {
@@ -143,7 +159,7 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 	// rather than being re-wrapped in an envelope of call_tool's own.
 	a.server.AddTool(&mcp.Tool{
 		Name:        "call_tool",
-		Description: "Runs one of this server's read-only tools by name. Use this when list_tools reports a tool that is not in your own list of available tools. Arguments must match that tool's input schema, which list_tools returns when given a tool_name.",
+		Description: "Runs one of this server's read-only tools by name. Use this when list_tools reports a dispatchable tool that is not in your own list of available tools. Arguments must match that tool's input schema, which list_tools returns when given a tool_name.",
 		InputSchema: schema.SchemaFromStruct(CallToolInput{}),
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
@@ -165,7 +181,7 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 
 		target := a.lookupDispatchable(input.ToolName)
 		if target == nil {
-			return nil, fmt.Errorf("unknown tool %q: call list_tools for the tools that can be run this way", input.ToolName)
+			return nil, fmt.Errorf("%q cannot be run with call_tool: call list_tools to see which tools are dispatchable, and call the others directly", input.ToolName)
 		}
 
 		var args json.RawMessage

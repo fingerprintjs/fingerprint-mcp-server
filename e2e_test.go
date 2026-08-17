@@ -1924,7 +1924,7 @@ func TestSessionID_RejectsValuesOutsideTheSpec(t *testing.T) {
 
 // --- Group: list_tools / call_tool ---
 
-func TestListToolsTool_ListsReadOnlyToolsOnly(t *testing.T) {
+func TestListToolsTool_ListsWriteToolsAsNotDispatchable(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
 	mgmtAPI := newMockManagementAPI()
@@ -1950,17 +1950,29 @@ func TestListToolsTool_ListsReadOnlyToolsOnly(t *testing.T) {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
-	var listed []string
+	dispatchable := map[string]bool{}
 	for _, tool := range out.Tools {
-		listed = append(listed, tool.Name)
+		dispatchable[tool.Name] = tool.Dispatchable
 	}
-	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
-	if len(listed) != len(expected) {
-		t.Errorf("expected %d dispatchable tools, got %d: %v", len(expected), len(listed), listed)
+
+	wantDispatchable := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	wantListedOnly := []string{"create_environment", "update_environment", "delete_environment", "create_api_key", "update_api_key", "delete_api_key"}
+
+	if len(out.Tools) != len(wantDispatchable)+len(wantListedOnly) {
+		t.Errorf("expected %d tools listed, got %d: %v", len(wantDispatchable)+len(wantListedOnly), len(out.Tools), out.Tools)
 	}
-	for _, e := range expected {
-		if !slices.Contains(listed, e) {
-			t.Errorf("expected %q to be dispatchable, got %v", e, listed)
+	for _, name := range wantDispatchable {
+		if d, ok := dispatchable[name]; !ok {
+			t.Errorf("expected %q to be listed", name)
+		} else if !d {
+			t.Errorf("expected %q to be dispatchable", name)
+		}
+	}
+	for _, name := range wantListedOnly {
+		if d, ok := dispatchable[name]; !ok {
+			t.Errorf("expected write tool %q to be listed", name)
+		} else if d {
+			t.Errorf("expected write tool %q to be listed but not dispatchable", name)
 		}
 	}
 	for _, tool := range out.Tools {
