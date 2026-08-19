@@ -368,6 +368,18 @@ func (a *App) handler() http.Handler {
 
 		bearerTokenOptions.ResourceMetadataURL = a.cfg.OAuthResource + "/.well-known/oauth-protected-resource"
 	}
+
+	// ChatGPT app submission rejects anything but the bare token, and a token
+	// piped in through YAML or a secret file tends to arrive with a newline.
+	// Registered outside the auth wrapper: the portal's probe is unauthenticated.
+	if token := strings.TrimSpace(a.cfg.OpenAIAppsChallengeToken); token != "" {
+		mux.HandleFunc("/.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte(token))
+		})
+		a.opts.logger().Info("serving ChatGPT app domain verification challenge", "bytes", len(token))
+	}
+
 	apiKeyAuth := auth.RequireBearerToken(a.verifyAuthToken, bearerTokenOptions)
 	// The inspector wraps outside auth so the embedder also sees requests
 	// that later fail authentication.
@@ -697,7 +709,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// readOnlyTools is the set of tools registered when --read-only is used.
+// readOnlyTools is the set of tools registered when --readonly is used.
 var readOnlyTools = []string{
 	"get_current_time",
 	"get_event",
@@ -710,7 +722,7 @@ var readOnlyTools = []string{
 }
 
 func (a *App) registerTools(ctx context.Context) error {
-	// Resolve the tool filter: explicit --tools takes precedence, then --read-only.
+	// Resolve the tool filter: explicit --tools takes precedence, then --readonly.
 	allowedTools := a.cfg.Tools
 	if len(allowedTools) == 0 && a.cfg.ReadOnly {
 		allowedTools = readOnlyTools

@@ -18,13 +18,14 @@ type Config struct {
 	TLSCert                  string   `arg:"env:MCP_TLS_CERT" help:"Path to TLS certificate file"`
 	TLSKey                   string   `arg:"env:MCP_TLS_KEY" help:"Path to TLS private key file"`
 	ReadOnly                 bool     `arg:"env:MCP_READ_ONLY" help:"Skip write tools, only expose read tools (shorthand for --tools with only read tools)"`
-	Tools                    []string `arg:"env:MCP_TOOLS" help:"Comma-separated list of tool names to register (overrides --read-only)"`
+	Tools                    []string `arg:"env:MCP_TOOLS" help:"Comma-separated list of tool names to register (overrides --readonly)"`
 	PublicMode               bool     `arg:"env:MCP_PUBLIC" help:"Run in public mode: expect Fingerprint API keys in http headers. If disabled, server will run in private mode using pre-configured API keys."`
 	AuthToken                string   `arg:"env:MCP_AUTH_TOKEN" help:"Require this token to passed via 'Authorization: Bearer' header to access this server. If not provided and running in private mode, will be generated automatically on startup."`
 	JwtPublicKey             string   `arg:"env:FINGERPRINT_PUBLIC_KEY" help:"PEM-encoded ES256 public key for verifying Fingerprint-issued JWT tokens"`
 	OAuthResource            string   `arg:"env:OAUTH_RESOURCE" help:"URL of this server"`
 	OAuthAuthorizationServer string   `arg:"env:OAUTH_AUTH_SERVER" help:"URL of the OAuth authorization server"`
 	JwksURL                  string   `arg:"env:JWKS_URL" help:"JWKS URL for JWT token verification in public mode"`
+	OpenAIAppsChallengeToken string   `arg:"env:OPENAI_APPS_CHALLENGE_TOKEN" help:"Domain verification token to serve at /.well-known/openai-apps-challenge (for ChatGPT app submission)"`
 }
 
 func MustParse() *Config {

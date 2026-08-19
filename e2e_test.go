@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1205,6 +1206,72 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+const challengeToken = "test-challenge-token"
+
+func fetchChallenge(t *testing.T, configured string) (*http.Response, string) {
+	t.Helper()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: configured,
+	})
+
+	// No Authorization header: the portal's probe is unauthenticated.
+	resp, err := http.Get(ts.URL + "/.well-known/openai-apps-challenge")
+	if err != nil {
+		t.Fatalf("challenge request failed: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp, string(body)
+}
+
+func TestOpenAIAppsChallenge(t *testing.T) {
+	resp, body := fetchChallenge(t, challengeToken)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if body != challengeToken {
+		t.Errorf("body must be the bare token, got %q", body)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("expected text/plain, got %q", ct)
+	}
+}
+
+// A token routed through YAML or a secret file picks up whitespace, and any of
+// it in the body fails verification.
+func TestOpenAIAppsChallenge_TrimsSurroundingWhitespace(t *testing.T) {
+	resp, body := fetchChallenge(t, "  "+challengeToken+"\n")
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if body != challengeToken {
+		t.Errorf("expected the trimmed token, got %q", body)
+	}
+}
+
+func TestOpenAIAppsChallenge_NotConfigured(t *testing.T) {
+	for name, configured := range map[string]string{
+		"unset":           "",
+		"whitespace only": " \n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, _ := fetchChallenge(t, configured)
+
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("expected 404 with no usable token, got %d", resp.StatusCode)
+			}
+		})
 	}
 }
 
