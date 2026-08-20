@@ -30,16 +30,8 @@ type APIKey struct {
 	DisabledAt *time.Time `json:"disabled_at" jsonschema:"Timestamp when the API key was disabled"`
 }
 
-// UnmarshalJSON accepts both spellings of the multi-word fields, because the
-// Management API is not consistent between them: GET /api-keys returns
-// snake_case (created_at, rate_limit, disabled_at) while GET /api-keys/{id}
-// returns camelCase (createdAt, rateLimit, disabledAt). Single-word fields are
-// spelled identically either way, which is why only these three are affected.
-//
-// Binding only the snake_case tags meant get_api_key reported a zero
-// created_at (year 1) and a zero rate_limit, so an agent reasoning about key
-// age or throttling was misled. The inconsistency belongs upstream, but until
-// it's fixed there this tolerates both rather than being wrong on one path.
+// UnmarshalJSON accepts both spellings: GET /api-keys sends snake_case while
+// GET /api-keys/{id} sends camelCase. Only the multi-word fields differ.
 func (k *APIKey) UnmarshalJSON(data []byte) error {
 	// alias sheds the custom unmarshaller so the embedded decode doesn't recurse.
 	type alias APIKey
@@ -54,8 +46,7 @@ func (k *APIKey) UnmarshalJSON(data []byte) error {
 	}
 
 	*k = APIKey(raw.alias)
-	// snake_case wins when present; the camelCase keys only fill the gaps, so a
-	// response carrying both can't have the fallback overwrite the real value.
+	// snake_case wins; camelCase only fills the gaps.
 	if k.CreatedAt.IsZero() && raw.CreatedAtCamel != nil {
 		k.CreatedAt = *raw.CreatedAtCamel
 	}

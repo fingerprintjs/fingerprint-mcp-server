@@ -6,9 +6,7 @@ import (
 	"time"
 )
 
-// The Management API spells these three fields differently on the list and
-// single-get endpoints. Both payloads below are the real shapes, captured from
-// GET /api-keys and GET /api-keys/{id} against the same key.
+// Both payloads are real shapes, captured from the two endpoints for one key.
 func TestAPIKey_UnmarshalAcceptsBothFieldSpellings(t *testing.T) {
 	want := time.Date(2025, 1, 31, 15, 53, 52, 180_000_000, time.UTC)
 
@@ -42,7 +40,6 @@ func TestAPIKey_UnmarshalAcceptsBothFieldSpellings(t *testing.T) {
 			if k.RateLimit != 5 {
 				t.Errorf("RateLimit = %v, want 5", k.RateLimit)
 			}
-			// Fields spelled the same either way must survive the custom decode.
 			if k.ID != "tok_0cj" || k.Name != "test" || k.Type != "public" || k.Status != "enabled" {
 				t.Errorf("single-word fields lost: %+v", k)
 			}
@@ -50,8 +47,7 @@ func TestAPIKey_UnmarshalAcceptsBothFieldSpellings(t *testing.T) {
 	}
 }
 
-// A disabled key carries a timestamp, and it's spelled differently per endpoint
-// like the others. Enabled keys send null, which is why this never surfaced.
+// Enabled keys send null here, which is why this never surfaced.
 func TestAPIKey_UnmarshalReadsDisabledAtEitherWay(t *testing.T) {
 	want := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)
 
@@ -69,8 +65,7 @@ func TestAPIKey_UnmarshalReadsDisabledAtEitherWay(t *testing.T) {
 	}
 }
 
-// If the API ever sends both, the documented spelling has to win rather than
-// the fallback silently overwriting it.
+// If both are sent, the documented spelling wins.
 func TestAPIKey_UnmarshalPrefersSnakeCaseWhenBothPresent(t *testing.T) {
 	body := `{"id":"t","rate_limit":5,"rateLimit":99,
 	          "created_at":"2025-01-31T15:53:52.180Z","createdAt":"2001-01-01T00:00:00Z"}`
