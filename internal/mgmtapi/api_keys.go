@@ -2,6 +2,7 @@ package mgmtapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"time"
 )
@@ -27,6 +28,35 @@ type APIKey struct {
 	CreatedAt time.Time `json:"created_at" jsonschema:"Timestamp when the API key was created"`
 	// DisabledAt is the timestamp when the API key was disabled.
 	DisabledAt *time.Time `json:"disabled_at" jsonschema:"Timestamp when the API key was disabled"`
+}
+
+// UnmarshalJSON accepts both spellings: GET /api-keys sends snake_case while
+// GET /api-keys/{id} sends camelCase. Only the multi-word fields differ.
+func (k *APIKey) UnmarshalJSON(data []byte) error {
+	// alias sheds the custom unmarshaller so the embedded decode doesn't recurse.
+	type alias APIKey
+	var raw struct {
+		alias
+		CreatedAtCamel  *time.Time `json:"createdAt"`
+		RateLimitCamel  *float64   `json:"rateLimit"`
+		DisabledAtCamel *time.Time `json:"disabledAt"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*k = APIKey(raw.alias)
+	// snake_case wins; camelCase only fills the gaps.
+	if k.CreatedAt.IsZero() && raw.CreatedAtCamel != nil {
+		k.CreatedAt = *raw.CreatedAtCamel
+	}
+	if k.RateLimit == 0 && raw.RateLimitCamel != nil {
+		k.RateLimit = *raw.RateLimitCamel
+	}
+	if k.DisabledAt == nil {
+		k.DisabledAt = raw.DisabledAtCamel
+	}
+	return nil
 }
 
 type ListAPIKeysParams struct {
