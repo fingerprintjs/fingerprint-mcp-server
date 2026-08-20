@@ -46,25 +46,26 @@ make build
 
 The server can be configured via CLI flags or environment variables:
 
-| CLI Flag               | Environment Variable             | Default                          | Description                                                              |
-|------------------------|----------------------------------|----------------------------------|--------------------------------------------------------------------------|
-| `--server-api-key`     | `FINGERPRINT_SERVER_API_KEY`     |                                  | Fingerprint Server API key (private mode)                                |
-| `--server-api-url`     | `FINGERPRINT_SERVER_API_URL`     | api.fpjs.io                      | Custom Server API URL (omit to use default)                              |
-| `--management-api-key` | `FINGERPRINT_MANAGEMENT_API_KEY` |                                  | Fingerprint Management API key (private mode)                            |
-| `--management-api-url` | `FINGERPRINT_MANAGEMENT_API_URL` | management-api.fpjs.io           | Custom Management API URL (omit to use default)                          |
-| `--region`             | `FINGERPRINT_REGION`             | `us`                             | API region: `us`, `eu`, or `ap` (private mode)                           |
-| `--transport`          | `MCP_TRANSPORT`                  | `stdio`                          | Transport: `stdio` or `streamable-http`                                  |
-| `--port`               | `MCP_PORT`                       | `8080`                           | Port for HTTP/HTTPS server                                               |
-| `--tls-cert`           | `MCP_TLS_CERT`                   |                                  | Path to TLS certificate file                                             |
-| `--tls-key`            | `MCP_TLS_KEY`                    |                                  | Path to TLS private key file                                             |
-| `--read-only`          | `MCP_READ_ONLY`                  | `false`                          | Only expose read tools (shorthand for `--tools` with read-only tools)    |
-| `--tools`              | `MCP_TOOLS`                      |                                  | Comma-separated list of tool names to register (overrides `--read-only`) |
-| `--public`             | `MCP_PUBLIC`                     | `false`                          | Public mode: extract API keys from JWT bearer tokens                     |
-| `--auth-token`         | `MCP_AUTH_TOKEN`                 | (auto-generated in private mode) | Bearer token required to access the server (private mode)                |
-| `--jwt-public-key`     | `FINGERPRINT_PUBLIC_KEY`         |                                  | PEM-encoded ES256 public key for verifying Fingerprint-issued JWT tokens |
-| `--oauth-resource`     | `OAUTH_RESOURCE`                 |                                  | URL of this server (for OAuth metadata)                                  |
-| `--oauth-auth-server`  | `OAUTH_AUTH_SERVER`              |                                  | URL of the OAuth authorization server                                    |
-| `--jwks-url`           | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
+| CLI Flag                     | Environment Variable             | Default                          | Description                                                              |
+|------------------------------|----------------------------------|----------------------------------|--------------------------------------------------------------------------|
+| `--serverapikey`             | `FINGERPRINT_SERVER_API_KEY`     |                                  | Fingerprint Server API key (private mode)                                |
+| `--serverapiurl`             | `FINGERPRINT_SERVER_API_URL`     | api.fpjs.io                      | Custom Server API URL (omit to use default)                              |
+| `--managementapikey`         | `FINGERPRINT_MANAGEMENT_API_KEY` |                                  | Fingerprint Management API key (private mode)                            |
+| `--managementapiurl`         | `FINGERPRINT_MANAGEMENT_API_URL` | management-api.fpjs.io           | Custom Management API URL (omit to use default)                          |
+| `--region`                   | `FINGERPRINT_REGION`             | `us`                             | API region: `us`, `eu`, or `ap` (private mode)                           |
+| `--transport`                | `MCP_TRANSPORT`                  | `stdio`                          | Transport: `stdio` or `streamable-http`                                  |
+| `--port`                     | `MCP_PORT`                       | `8080`                           | Port for HTTP/HTTPS server                                               |
+| `--tlscert`                  | `MCP_TLS_CERT`                   |                                  | Path to TLS certificate file                                             |
+| `--tlskey`                   | `MCP_TLS_KEY`                    |                                  | Path to TLS private key file                                             |
+| `--readonly`                 | `MCP_READ_ONLY`                  | `false`                          | Only expose read tools (shorthand for `--tools` with read-only tools)    |
+| `--tools`                    | `MCP_TOOLS`                      |                                  | Comma-separated list of tool names to register (overrides `--readonly`)  |
+| `--publicmode`               | `MCP_PUBLIC`                     | `false`                          | Public mode: extract API keys from JWT bearer tokens                     |
+| `--authtoken`                | `MCP_AUTH_TOKEN`                 | (auto-generated in private mode) | Bearer token required to access the server (private mode)                |
+| `--jwtpublickey`             | `FINGERPRINT_PUBLIC_KEY`         |                                  | PEM-encoded ES256 public key for verifying Fingerprint-issued JWT tokens |
+| `--oauthresource`            | `OAUTH_RESOURCE`                 |                                  | URL of this server (for OAuth metadata)                                  |
+| `--oauthauthorizationserver` | `OAUTH_AUTH_SERVER`              |                                  | URL of the OAuth authorization server                                    |
+| `--jwksurl`                  | `JWKS_URL`                       |                                  | JWKS URL for JWT token verification in public mode                       |
+| `--openaiappschallengetoken` | `OPENAI_APPS_CHALLENGE_TOKEN`    |                                  | Domain verification token served at `/.well-known/openai-apps-challenge` |
 
 ## Telemetry
 
@@ -130,7 +131,7 @@ Provide TLS certificate and key files to enable HTTPS:
 
 ```bash
 ./fingerprint-mcp-server --transport=streamable-http \
-  --tls-cert=cert.pem --tls-key=key.pem
+  --tlscert=cert.pem --tlskey=key.pem
 ```
 
 ### Tool Filtering
@@ -139,13 +140,13 @@ By default, all tools are registered based on which API keys are configured. You
 
 ```bash
 # Only expose read-only tools
-./fingerprint-mcp-server --read-only
+./fingerprint-mcp-server --readonly
 
 # Expose a specific set of tools
 ./fingerprint-mcp-server --tools=get_event,search_events,list_environments
 ```
 
-When `--tools` is set, it overrides `--read-only`.
+When `--tools` is set, it overrides `--readonly`.
 
 ## Docker
 
@@ -238,7 +239,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. `get_current_time` needs no key and is always available. Write tools (create/update/delete) are hidden when `--read-only` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` needs no key and is always available. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|

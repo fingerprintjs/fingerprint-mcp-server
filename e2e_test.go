@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1205,6 +1206,133 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+const challengeToken = "test-challenge-token"
+
+func fetchChallenge(t *testing.T, configured string) (*http.Response, string) {
+	t.Helper()
+
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: configured,
+	})
+
+	// No Authorization header: the portal's probe is unauthenticated.
+	resp, err := http.Get(ts.URL + "/.well-known/openai-apps-challenge")
+	if err != nil {
+		t.Fatalf("challenge request failed: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp, string(body)
+}
+
+func TestOpenAIAppsChallenge(t *testing.T) {
+	resp, body := fetchChallenge(t, challengeToken)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if body != challengeToken {
+		t.Errorf("body must be the bare token, got %q", body)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("expected text/plain, got %q", ct)
+	}
+}
+
+// A token routed through YAML or a secret file picks up whitespace, and any of
+// it in the body fails verification.
+func TestOpenAIAppsChallenge_TrimsSurroundingWhitespace(t *testing.T) {
+	resp, body := fetchChallenge(t, "  "+challengeToken+"\n")
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if body != challengeToken {
+		t.Errorf("expected the trimmed token, got %q", body)
+	}
+}
+
+func TestOpenAIAppsChallenge_NotConfigured(t *testing.T) {
+	for name, configured := range map[string]string{
+		"unset":           "",
+		"whitespace only": " \n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, _ := fetchChallenge(t, configured)
+
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("expected 404 with no usable token, got %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// Registered as an exact path, not a subtree, so the token is not served from
+// anywhere else. A subtree pattern or a catch-all route would hand it out under
+// arbitrary paths.
+func TestOpenAIAppsChallenge_ExactPathOnly(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: challengeToken,
+	})
+
+	for name, path := range map[string]string{
+		"trailing slash": "/.well-known/openai-apps-challenge/",
+		"subpath":        "/.well-known/openai-apps-challenge/extra",
+		"case variant":   "/.well-known/OpenAI-Apps-Challenge",
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := http.Get(ts.URL + path)
+			if err != nil {
+				t.Fatalf("challenge request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("expected 404 outside the exact path, got %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// The portal probes with GET (and Go's method pattern answers HEAD alongside it).
+// Anything else is not the portal, so it gets a 405 rather than the token.
+func TestOpenAIAppsChallenge_GETOnly(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: challengeToken,
+	})
+
+	for method, want := range map[string]int{
+		http.MethodGet:    http.StatusOK,
+		http.MethodHead:   http.StatusOK,
+		http.MethodPost:   http.StatusMethodNotAllowed,
+		http.MethodPut:    http.StatusMethodNotAllowed,
+		http.MethodDelete: http.StatusMethodNotAllowed,
+	} {
+		t.Run(method, func(t *testing.T) {
+			req, err := http.NewRequest(method, ts.URL+"/.well-known/openai-apps-challenge", nil)
+			if err != nil {
+				t.Fatalf("build request: %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("challenge request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != want {
+				t.Errorf("expected %d for %s, got %d", want, method, resp.StatusCode)
+			}
+		})
 	}
 }
 
