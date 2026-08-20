@@ -373,7 +373,7 @@ func (a *App) handler() http.Handler {
 	// piped in through YAML or a secret file tends to arrive with a newline.
 	// Registered outside the auth wrapper: the portal's probe is unauthenticated.
 	if token := strings.TrimSpace(a.cfg.OpenAIAppsChallengeToken); token != "" {
-		mux.HandleFunc("/.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("GET /.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			_, _ = w.Write([]byte(token))
 		})

@@ -1275,6 +1275,67 @@ func TestOpenAIAppsChallenge_NotConfigured(t *testing.T) {
 	}
 }
 
+// Registered as an exact path, not a subtree, so the token is not served from
+// anywhere else. A subtree pattern or a catch-all route would hand it out under
+// arbitrary paths.
+func TestOpenAIAppsChallenge_ExactPathOnly(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: challengeToken,
+	})
+
+	for name, path := range map[string]string{
+		"trailing slash": "/.well-known/openai-apps-challenge/",
+		"subpath":        "/.well-known/openai-apps-challenge/extra",
+		"case variant":   "/.well-known/OpenAI-Apps-Challenge",
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := http.Get(ts.URL + path)
+			if err != nil {
+				t.Fatalf("challenge request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("expected 404 outside the exact path, got %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// The portal probes with GET (and Go's method pattern answers HEAD alongside it).
+// Anything else is not the portal, so it gets a 405 rather than the token.
+func TestOpenAIAppsChallenge_GETOnly(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{
+		AuthToken:                defaultAuthToken,
+		OpenAIAppsChallengeToken: challengeToken,
+	})
+
+	for method, want := range map[string]int{
+		http.MethodGet:    http.StatusOK,
+		http.MethodHead:   http.StatusOK,
+		http.MethodPost:   http.StatusMethodNotAllowed,
+		http.MethodPut:    http.StatusMethodNotAllowed,
+		http.MethodDelete: http.StatusMethodNotAllowed,
+	} {
+		t.Run(method, func(t *testing.T) {
+			req, err := http.NewRequest(method, ts.URL+"/.well-known/openai-apps-challenge", nil)
+			if err != nil {
+				t.Fatalf("build request: %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("challenge request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != want {
+				t.Errorf("expected %d for %s, got %d", want, method, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestCORS_Options_PublicMode(t *testing.T) {
 	ts := setupTestServer(t, &config.Config{
 		PublicMode: true,
