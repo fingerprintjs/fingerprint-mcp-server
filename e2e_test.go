@@ -1402,6 +1402,27 @@ func TestCORS_AllowsSessionIDHeader(t *testing.T) {
 	}
 }
 
+// Clients from spec 2026-07-28 on mirror the JSON-RPC method and the target
+// tool/prompt/resource into these headers, so a browser client can't complete
+// a preflight without them.
+func TestCORS_AllowsRoutingHeaders(t *testing.T) {
+	ts := setupTestServer(t, &config.Config{PublicMode: true})
+
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/mcp", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("OPTIONS request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
+	for _, h := range []string{"Mcp-Method", "Mcp-Name"} {
+		if !strings.Contains(allowHeaders, h) {
+			t.Errorf("expected %s in allowed headers, got %q", h, allowHeaders)
+		}
+	}
+}
+
 // TestLoggingMiddleware_ResourceAndPromptFields verifies that the middleware
 // extracts resource_uri from resources/read requests and prompt_name from
 // prompts/get requests and includes them in the structured log line, mirroring

@@ -531,8 +531,14 @@ func (a *App) corsMiddleware(next http.Handler) http.Handler {
 	// clients send their own and it's what correlates their requests, so a
 	// browser client has to be able to send it. Exposing it on the response
 	// stays gated below, since only stateful mode returns it.
+	//
+	// Mcp-Method and Mcp-Name are required of clients from spec 2026-07-28
+	// on, Mcp-Method on every request. Leaving them out fails the preflight
+	// for a browser client on that spec, which blocks the request itself
+	// rather than just dropping the header.
 	allowHeaders := []string{
 		"Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id",
+		"Mcp-Method", "Mcp-Name",
 		"x-custom-auth-headers", // workaround for mcp inspector that sends this header by mistake. see: https://github.com/modelcontextprotocol/inspector/issues/1100
 	}
 	if a.cfg.AuthToken != "" || a.cfg.PublicMode {
