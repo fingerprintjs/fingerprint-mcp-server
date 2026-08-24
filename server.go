@@ -459,6 +459,25 @@ func validSessionID(id string) bool {
 	return true
 }
 
+// routingHeadersKey carries the SEP-2243 routing headers from the HTTP layer
+// down to the method handlers, which never see the request itself.
+type routingHeadersKey struct{}
+
+// routingHeaders is what the analytics path records about SEP-2243. The tool or
+// resource the call targets is already read from the body, so only whether the
+// client mirrored it into a header is worth keeping.
+type routingHeaders struct {
+	protocolVersion string
+	sentName        bool
+}
+
+// routingHeadersFromContext returns the SEP-2243 headers for this request. The
+// zero value is correct for stdio and for clients on an older spec.
+func routingHeadersFromContext(ctx context.Context) routingHeaders {
+	h, _ := ctx.Value(routingHeadersKey{}).(routingHeaders)
+	return h
+}
+
 // sessionIDMiddleware stashes the client's Mcp-Session-Id in the request
 // context. It's read from the header rather than mcp.Session.ID() because in
 // stateless mode the SDK never assigns one, yet clients still send their own,
@@ -469,9 +488,19 @@ func validSessionID(id string) bool {
 // would only add noise.
 func (a *App) sessionIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		if id := r.Header.Get("Mcp-Session-Id"); validSessionID(id) {
-			r = r.WithContext(context.WithValue(r.Context(), sessionIDKey{}, id))
+			ctx = context.WithValue(ctx, sessionIDKey{}, id)
 		}
+		// Clients on spec 2026-07-28 and later mirror the method and the target
+		// tool, prompt or resource into headers. Recording whether they did is
+		// what measures adoption, which gates any filtering that reads them.
+		h := routingHeaders{sentName: r.Header.Get("Mcp-Name") != ""}
+		if v := r.Header.Get("Mcp-Protocol-Version"); validSessionID(v) {
+			h.protocolVersion = v
+		}
+		ctx = context.WithValue(ctx, routingHeadersKey{}, h)
+		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -609,6 +638,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 
 		sessionID := sessionIDFromContext(ctx)
+		routing := routingHeadersFromContext(ctx)
 		// subID is optional. GetExtra() returns nil in stdio mode (no auth
 		// pipeline runs) and TokenInfo is nil in private-mode HTTP without a
 		// configured AuthToken. Guard both dereferences so the middleware
@@ -698,6 +728,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			method:        method,
 			subID:         subID,
 			sessionID:     sessionID,
+			routing:       routing,
 			toolName:      toolName,
 			resourceURI:   resourceURI,
 			promptName:    promptName,

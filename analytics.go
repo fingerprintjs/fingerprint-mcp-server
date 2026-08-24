@@ -18,6 +18,7 @@ type analyticsInputs struct {
 
 	toolName, resourceURI, promptName string
 	clientName, clientVersion         string
+	routing                           routingHeaders
 
 	duration     time.Duration
 	isError      bool
@@ -106,6 +107,14 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 	// initialize that named the client.
 	if in.sessionID != "" {
 		props["session_id"] = in.sessionID
+	}
+	// Whether the client mirrored the target name into the Mcp-Name header, and
+	// the protocol version it negotiated. Together these say how much of the
+	// fleet is on spec 2026-07-28, which is what decides whether anything can
+	// route or filter on those headers rather than on the request body.
+	props["sent_mcp_name"] = in.routing.sentName
+	if in.routing.protocolVersion != "" {
+		props["protocol_version"] = in.routing.protocolVersion
 	}
 	a.opts.analyticsEmitter().Emit(analytics.Event{
 		Type:           "mcp_method_called",

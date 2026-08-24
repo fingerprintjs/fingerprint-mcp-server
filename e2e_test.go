@@ -1676,6 +1676,80 @@ func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
 	}
 }
 
+// Adoption of spec 2026-07-28 decides whether anything can route or filter on
+// the mirrored headers instead of the request body, so the analytics event has
+// to say whether the client sent them. The protocol version is whatever the
+// client negotiated; the SDK always sends one, so it is asserted as present
+// rather than to a fixed value.
+func TestAnalytics_RecordsSpecRoutingHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		headers      map[string]string
+		wantSentName bool
+	}{
+		{name: "client mirrors the target name", headers: map[string]string{"Mcp-Name": "search_events"}, wantSentName: true},
+		{name: "client sends no name", headers: map[string]string{}, wantSentName: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			emitter := newRecordingEmitter()
+			privKey, pubPEM := generateES256KeyPEM(t)
+			cfg := &config.Config{
+				PublicMode:   true,
+				JwtPublicKey: pubPEM,
+				Transport:    "streamable-http",
+			}
+			ts := setupTestServerWithEmitter(t, cfg, emitter)
+
+			token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_test_xyz")
+
+			client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+			transport := &mcp.StreamableClientTransport{
+				Endpoint: ts.URL + "/mcp",
+				HTTPClient: &http.Client{
+					Transport: &authRoundTripper{
+						token: token,
+						base:  &headerRoundTripper{headers: tc.headers, base: http.DefaultTransport},
+					},
+				},
+			}
+			session, err := client.Connect(context.Background(), transport, nil)
+			if err != nil {
+				t.Fatalf("failed to connect MCP client: %v", err)
+			}
+			t.Cleanup(func() { session.Close() })
+
+			if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
+				t.Fatalf("ListTools: %v", err)
+			}
+
+			events := emitter.snapshot()
+			if len(events) == 0 {
+				t.Fatal("expected at least one analytics event, got 0")
+			}
+			var checked int
+			for _, ev := range events {
+				if ev.Type != "mcp_method_called" {
+					continue
+				}
+				checked++
+				if got := ev.Properties["sent_mcp_name"]; got != tc.wantSentName {
+					t.Errorf("%v: sent_mcp_name=%v, want %v", ev.Properties["method"], got, tc.wantSentName)
+				}
+				// The header is only sent once a version has been negotiated, so
+				// initialize itself carries none.
+				if ev.Properties["method"] != "initialize" {
+					if got, ok := ev.Properties["protocol_version"].(string); !ok || got == "" {
+						t.Errorf("%v: protocol_version missing, got %v", ev.Properties["method"], ev.Properties["protocol_version"])
+					}
+				}
+			}
+			if checked == 0 {
+				t.Fatal("no mcp_method_called events to assert on")
+			}
+		})
+	}
+}
+
 func TestAnalytics_PrivateMode_EmitsNothing(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
