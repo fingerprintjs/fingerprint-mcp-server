@@ -1,10 +1,13 @@
 package fpmcpserver
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -503,11 +506,52 @@ func (a *App) inspectMiddleware(next http.Handler) http.Handler {
 			Header:     r.Header,
 			RemoteIP:   ip,
 			RemotePort: port,
+			MCPMethod:  peekMCPMethod(r),
 		}); err != nil {
 			a.opts.logger().Error("request inspector failed", "err", err, "remote_ip", ip)
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// mcpMethodPeekBytes bounds how much of a body is read to find the method
+// name. A ping is under 60 bytes and the SDK puts "method" near the front,
+// so this is generous for the case it exists to catch while staying far
+// below any real tool-call payload.
+const mcpMethodPeekBytes = 1 << 10
+
+// peekMCPMethod reads the JSON-RPC method name from the front of the request
+// body without consuming it: the bytes read are put back in front of the
+// remainder, so the handler still sees the whole body.
+//
+// It returns "" whenever the name cannot be read cheaply, which callers must
+// treat as unknown rather than as a method they can act on.
+func peekMCPMethod(r *http.Request) string {
+	if r.Method != http.MethodPost || r.Body == nil {
+		return ""
+	}
+	buf := make([]byte, mcpMethodPeekBytes)
+	n, readErr := io.ReadFull(r.Body, buf)
+	buf = buf[:n]
+	// Put the peeked bytes back in front of the remainder, on every path
+	// including the failed one, so the handler sees the body it would have
+	// seen. The original Closer is carried through rather than wrapped in a
+	// NopCloser, so a caller that closes r.Body still closes the real thing.
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(buf), r.Body), r.Body}
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		return ""
+	}
+
+	var probe struct {
+		Method string `json:"method"`
+	}
+	// A truncated peek is not valid JSON, so decode leniently and take
+	// whatever was parsed before the error.
+	_ = json.NewDecoder(bytes.NewReader(buf)).Decode(&probe)
+	return probe.Method
 }
 
 // splitRemoteAddr splits an http.Request.RemoteAddr of the form "ip:port"

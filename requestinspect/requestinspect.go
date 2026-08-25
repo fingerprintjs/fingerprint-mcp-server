@@ -49,6 +49,16 @@ type Info struct {
 	// RemotePort is the source port of the direct TCP peer. Zero when
 	// the peer address has no parseable "ip:port" form.
 	RemotePort int
+
+	// MCPMethod is the JSON-RPC method name, read from the start of the
+	// request body. It exists so an implementation can skip work for
+	// methods that carry no signal, such as keepalive pings.
+	//
+	// Empty means "not known", never "no method": it is empty for GET and
+	// DELETE, for non-JSON bodies, for batches, and whenever the name did
+	// not appear in the bytes the server peeked at. Treat an empty value as
+	// a request to handle normally rather than one to skip.
+	MCPMethod string
 }
 
 // Inspector receives request metadata for analysis and logging. It is kept
