@@ -531,18 +531,19 @@ func peekMCPMethod(r *http.Request) string {
 		return ""
 	}
 	buf := make([]byte, mcpMethodPeekBytes)
-	n, err := io.ReadFull(r.Body, buf)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		// The body is unreadable. Restore what was read so the handler sees
-		// the same failure rather than a silently truncated body.
-		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf[:n]), r.Body))
-		return ""
-	}
+	n, readErr := io.ReadFull(r.Body, buf)
 	buf = buf[:n]
+	// Put the peeked bytes back in front of the remainder, on every path
+	// including the failed one, so the handler sees the body it would have
+	// seen. The original Closer is carried through rather than wrapped in a
+	// NopCloser, so a caller that closes r.Body still closes the real thing.
 	r.Body = struct {
 		io.Reader
 		io.Closer
 	}{io.MultiReader(bytes.NewReader(buf), r.Body), r.Body}
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		return ""
+	}
 
 	var probe struct {
 		Method string `json:"method"`
