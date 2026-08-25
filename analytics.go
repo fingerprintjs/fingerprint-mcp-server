@@ -104,8 +104,13 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 	// The client's own Mcp-Session-Id, also forwarded to the request inspector
 	// in the request headers. It's what joins an inspected request back to the
 	// initialize that named the client.
+	//
+	// Named mcp_session_id, not session_id: the latter collides with Amplitude's
+	// built-in session property, which makes queries ambiguous and silently
+	// resolve to the built-in. The prefixed name also matches the mcp-session-id
+	// tag the inspector already sends, so both sides of the join agree.
 	if in.sessionID != "" {
-		props["session_id"] = in.sessionID
+		props["mcp_session_id"] = in.sessionID
 	}
 	a.opts.analyticsEmitter().Emit(analytics.Event{
 		Type:           "mcp_method_called",

@@ -1670,8 +1670,8 @@ func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
 		if ev.Type != "mcp_method_called" {
 			continue
 		}
-		if got := ev.Properties["session_id"]; got != sessionID {
-			t.Errorf("%v: session_id=%v, want %s", ev.Properties["method"], got, sessionID)
+		if got := ev.Properties["mcp_session_id"]; got != sessionID {
+			t.Errorf("%v: mcp_session_id=%v, want %s", ev.Properties["method"], got, sessionID)
 		}
 	}
 }
