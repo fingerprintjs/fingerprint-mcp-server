@@ -1676,6 +1676,54 @@ func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
 	}
 }
 
+// The inspector has to see the JSON-RPC method so it can skip work for
+// methods that carry no signal, and it has to do that without eating the body
+// the handler still needs.
+func TestInspector_SeesMCPMethodAndLeavesTheBodyIntact(t *testing.T) {
+	ins := newRecordingInspector()
+	privKey, pubPEM := generateES256KeyPEM(t)
+	cfg := &config.Config{PublicMode: true, JwtPublicKey: pubPEM, Transport: "streamable-http"}
+	ts := setupTestServerWithInspector(t, cfg, ins, nil)
+
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_test_xyz")
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:   ts.URL + "/mcp",
+		HTTPClient: &http.Client{Transport: &authRoundTripper{token: token, base: http.DefaultTransport}},
+	}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect MCP client: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	// The handler only answers this if the body survived the peek.
+	res, err := session.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(res.Tools) == 0 {
+		t.Fatal("expected tools back, got none")
+	}
+
+	seen := map[string]bool{}
+	for _, info := range ins.snapshot() {
+		seen[info.MCPMethod] = true
+	}
+	for _, want := range []string{"initialize", "tools/list"} {
+		if !seen[want] {
+			t.Errorf("inspector never saw MCPMethod=%q, saw %v", want, seen)
+		}
+	}
+	// GET and DELETE carry no body, so they must report unknown rather than
+	// inheriting a method from a previous request.
+	for _, info := range ins.snapshot() {
+		if info.Method != http.MethodPost && info.MCPMethod != "" {
+			t.Errorf("%s carried MCPMethod=%q, want empty", info.Method, info.MCPMethod)
+		}
+	}
+}
+
 func TestAnalytics_PrivateMode_EmitsNothing(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
