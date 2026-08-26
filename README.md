@@ -12,7 +12,7 @@
 
 ## Features
 
-- Run locally or use managed instance at https://mcp.fpjs.io/mcp
+- Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
 - **Event tools**: Retrieve and search identification events with full smart signal data
 - **Management tools**: Manage workspace environments and API keys
 - **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
@@ -178,7 +178,13 @@ docker run -d --rm \
 
 ### Hosted endpoint (managed)
 
-The quickest way to connect is the managed instance at `https://mcp.fpjs.io/mcp`, which runs in public mode and authenticates each user via OAuth2.
+The managed instance at `https://mcp.fpjs.io/mcp` runs in public mode and authenticates each user via OAuth2. Nothing to run or configure.
+
+**In Claude**, add it from the connectors directory rather than as a custom connector: open [Customize > Connectors](https://claude.ai/customize/connectors), choose **Browse connectors**, and search for Fingerprint. The same catalog serves claude.ai, Desktop, mobile and Claude Code, so this only has to be done once per account.
+
+Adding it as a custom connector still works, but you have to name it yourself, and some characters in that name break tool discovery while the connector still reports as connected.
+
+**In other clients**, point them at the URL directly:
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=Fingerprint&config=eyJ1cmwiOiJodHRwczovL21jcC5mcGpzLmlvL21jcCIsInRyYW5zcG9ydCI6InN0cmVhbWFibGUtaHR0cCJ9)
 
