@@ -82,6 +82,24 @@ func TestAPIKey_UnmarshalPrefersSnakeCaseWhenBothPresent(t *testing.T) {
 	}
 }
 
+// An explicit 0 or null in snake_case is a real value, not a gap for camelCase
+// to fill: 0 is an unthrottled key and null is an enabled one.
+func TestAPIKey_UnmarshalPrefersSnakeCaseZeroAndNull(t *testing.T) {
+	body := `{"id":"t","rate_limit":0,"rateLimit":99,
+	          "disabled_at":null,"disabledAt":"2001-01-01T00:00:00Z"}`
+
+	var k APIKey
+	if err := json.Unmarshal([]byte(body), &k); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if k.RateLimit != 0 {
+		t.Errorf("RateLimit = %v, want the snake_case 0", k.RateLimit)
+	}
+	if k.DisabledAt != nil {
+		t.Errorf("DisabledAt = %v, want nil from the snake_case null", k.DisabledAt)
+	}
+}
+
 // Malformed input must still error rather than yielding a zero-valued key.
 func TestAPIKey_UnmarshalPropagatesErrors(t *testing.T) {
 	var k APIKey

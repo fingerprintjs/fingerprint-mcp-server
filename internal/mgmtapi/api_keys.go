@@ -44,16 +44,23 @@ func (k *APIKey) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	// Presence of the snake_case key decides precedence, not the value it
+	// decoded to: rate_limit is legitimately 0 on an unthrottled key and
+	// disabled_at is legitimately null on an enabled one, and neither should
+	// be replaced by the camelCase spelling.
+	var present map[string]json.RawMessage
+	if err := json.Unmarshal(data, &present); err != nil {
+		return err
+	}
 
 	*k = APIKey(raw.alias)
-	// snake_case wins; camelCase only fills the gaps.
-	if k.CreatedAt.IsZero() && raw.CreatedAtCamel != nil {
+	if _, ok := present["created_at"]; !ok && raw.CreatedAtCamel != nil {
 		k.CreatedAt = *raw.CreatedAtCamel
 	}
-	if k.RateLimit == 0 && raw.RateLimitCamel != nil {
+	if _, ok := present["rate_limit"]; !ok && raw.RateLimitCamel != nil {
 		k.RateLimit = *raw.RateLimitCamel
 	}
-	if k.DisabledAt == nil {
+	if _, ok := present["disabled_at"]; !ok {
 		k.DisabledAt = raw.DisabledAtCamel
 	}
 	return nil
