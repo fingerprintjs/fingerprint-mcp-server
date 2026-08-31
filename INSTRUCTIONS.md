@@ -2,7 +2,7 @@ Tools, resources, and prompts for the Fingerprint device intelligence platform (
 
 ## Capabilities
 
-- **Events**: `get_event`, `search_events` return `visitorId`, smart signals (bot, VPN, incognito, …), and request metadata.
+- **Events**: `get_event`, `search_events` cover two kinds of event. Identification events (JS Agent or mobile SDK) return `visitor_id`, browser and device details, and the full smart signal set. Automation Intelligence (edge) events return only request and IP derived fields (`ip_info`, `proxy`, `vpn`, `bot_info`, `url`, `tags`, `timestamp`) and have no `visitor_id`.
 - **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
 - **Onboarding**: the `Fingerprint Onboarding Guide` prompt walks through JS Agent install and event verification.
 - **Schemas**: event, environment, and API key schemas are exposed as resources.
@@ -11,6 +11,8 @@ Tools, resources, and prompts for the Fingerprint device intelligence platform (
 ## Guidance
 
 - Prefer `search_events` over `get_event` unless you have a specific `requestId`.
+- `search_events` returns one kind of event per call: omit `source` for identification events, pass `source: ["edge"]` for edge events, and search twice to cover both. Edge events are only searchable for the last 7 days.
+- Never report a `visitor_id` or device detail for an edge event; read what the response actually contains.
 - `search_events` `start`/`end` are RFC3339; derive from current wall-clock time, not training data.
 - Event timestamps (`timestamp`, `first_seen_at`, `last_seen_at`) come back as RFC3339 UTC strings, read them as-is, no conversion.
 - `factory_reset_timestamp` is the exception: Unix epoch milliseconds, where `0` means no factory reset was detected.
