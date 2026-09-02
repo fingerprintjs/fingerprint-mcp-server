@@ -16,7 +16,7 @@ import (
 
 // GetEventInput defines the input schema for the get_event tool
 type GetEventInput struct {
-	EventID  string   `json:"event_id" jsonschema:"The unique identifier of the identification event to retrieve"`
+	EventID  string   `json:"event_id" jsonschema:"The unique identifier of the event to retrieve. Accepts both identification and Automation Intelligence (edge) event IDs."`
 	Products []string `json:"products,omitempty" jsonschema:"Optional list of product fields to include in the response. If omitted all products are returned."`
 }
 
@@ -58,10 +58,10 @@ func envelopeOutputSchema(key, description string) json.RawMessage {
 }
 
 var getEventOutputSchema = envelopeOutputSchema("event",
-	"The identification event: visitor_id, browser and device details, geolocation, bot detection, and smart signals. Full shape: fingerprint://schemas/event resource.")
+	"The event. An identification event has identification.visitor_id, browser and device details, geolocation, and the full smart signal set. An Automation Intelligence (edge) event has only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp) and no visitor_id. Full shape: fingerprint://schemas/event resource.")
 
 var searchEventsOutputSchema = envelopeOutputSchema("events",
-	"Result set: an events array of matching identification events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource.")
+	"Result set: an events array of matching events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource; edge results carry no visitor_id and no device details.")
 
 func (a *App) requireFingerprintClient(_ context.Context, reqExtra *mcp.RequestExtra) (*fingerprint.Client, error) {
 	var apiKey string
@@ -122,7 +122,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 	// Register the get_event tool
 	addTool(a, &mcp.Tool{
 		Name:         "get_event",
-		Description:  "Retrieves detailed information about a specific identification event from Fingerprint using its event_id. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
+		Description:  "Retrieves a single Fingerprint event by event_id. Fingerprint has two kinds of event, both reachable through this tool: an identification event, collected by the JS Agent or a mobile SDK, returns identification.visitor_id, browser and device details, geolocation, and the full smart signal set; an Automation Intelligence (edge) event, observed server-side with no client agent, returns only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp). An edge event has no visitor_id and no device-derived signals, so read the returned fields rather than assuming either kind. For schema, see mcp resource fingerprint://schemas/event",
 		OutputSchema: getEventOutputSchema,
 		InputSchema:  schema.PatchProductsEnum(schema.SchemaFromStruct(GetEventInput{})),
 		Annotations: &mcp.ToolAnnotations{
@@ -160,7 +160,7 @@ func (a *App) registerSearchEventsTool(_ context.Context) error {
 	// Register the search_events tool
 	addTool(a, &mcp.Tool{
 		Name:         "search_events",
-		Description:  "Retrieves detailed information about events matching provided criteria. Returns comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
+		Description:  "Retrieves events matching provided criteria. The two kinds of Fingerprint event are searched separately and never mixed in one response: omit `source` for identification events (JS Agent or mobile SDK), or pass source: [\"edge\"] for Automation Intelligence (edge) events, and search twice to cover both. An identification event returns identification.visitor_id, browser and device details, geolocation, and the full smart signal set. An edge event returns only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp): no visitor_id, no device details. Edge events are only searchable for the last 7 days. Output can be large so consider only choosing products that you need and setting the limit to a dozen events or so. For schema of every individual event, see mcp resource fingerprint://schemas/event",
 		OutputSchema: searchEventsOutputSchema,
 		InputSchema:  schema.PatchProductsEnum(schema.SearchEventsInputSchema),
 		Annotations: &mcp.ToolAnnotations{

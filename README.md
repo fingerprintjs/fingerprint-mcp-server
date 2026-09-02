@@ -13,7 +13,7 @@
 ## Features
 
 - Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
-- **Event tools**: Retrieve and search identification events with full smart signal data
+- **Event tools**: Retrieve and search identification and Automation Intelligence (edge) events with full smart signal data
 - **Management tools**: Manage workspace environments and API keys
 - **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
 - Supports both **stdio** and **streamable-http** transports
@@ -250,7 +250,7 @@ Event tools require a Server API key. Management tools require a Management API 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
 | `get_current_time`   | Return the current date/time in UTC (and an optional IANA timezone) |
-| `get_event`          | Retrieve a specific identification event by ID                      |
+| `get_event`          | Retrieve a specific event by ID (identification or edge)            |
 | `search_events`      | Search events with filters (visitor, IP, smart signals, time range) |
 | `list_environments`  | List workspace environments with pagination                         |
 | `get_api_key`        | Get details of a specific API key                                   |

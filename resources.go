@@ -18,10 +18,10 @@ func (a *App) registerEventResource(_ context.Context) error {
 	}
 
 	a.server.AddResourceTemplate(&mcp.ResourceTemplate{
-		Description: "Detailed information about a specific identification event from Fingerprint using its event_id. Contains comprehensive data including visitor_id, browser details, geolocation, bot detection, and various smart signals for fraud detection. For schema, see mcp resource fingerprint://schemas/event",
+		Description: "A single Fingerprint event by event_id, of either kind. An identification event, collected by the JS Agent or a mobile SDK, contains visitor_id, browser and device details, geolocation, and the full smart signal set. An Automation Intelligence (edge) event, observed server-side with no client agent, contains only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp) and has no visitor_id. For schema, see mcp resource fingerprint://schemas/event",
 		MIMEType:    "application/json",
-		Name:        "identification_event",
-		Title:       "Identification Event",
+		Name:        "event",
+		Title:       "Fingerprint Event",
 		URITemplate: uriTemplate,
 		Icons:       nil,
 	}, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -116,10 +116,10 @@ func (a *App) registerEventSchemaResource(_ context.Context) error {
 	content := schema.PatchTimestampFormat(schema.SchemaFromStruct(GetEventOutput{}))
 
 	a.server.AddResource(&mcp.Resource{
-		Description: "JSON Schema for identification events",
+		Description: "JSON Schema for Fingerprint events. One flat shape covers both kinds and every property is optional: an Automation Intelligence (edge) event populates only the request and IP derived ones (ip_info, proxy, vpn, bot_info, url, tags, timestamp), never visitor_id or device details.",
 		MIMEType:    "application/schema+json",
-		Name:        "identification_event_schema",
-		Title:       "Identification Event JSON Schema",
+		Name:        "event_schema",
+		Title:       "Fingerprint Event JSON Schema",
 		URI:         "fingerprint://schemas/event",
 	}, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		return &mcp.ReadResourceResult{
