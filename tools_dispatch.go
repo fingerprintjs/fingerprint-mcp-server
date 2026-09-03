@@ -188,6 +188,13 @@ type ListToolsOutput struct {
 	Tools []ListedTool `json:"tools" jsonschema:"Tools this server is serving right now"`
 }
 
+// proxyOutputSchema is what both proxies return: the named tool's own result,
+// passed through untouched. The union over every target cannot be written as
+// one schema, and naming a single tool's shape would be a lie for the rest, so
+// this declares only what holds for all of them and points at list_tools for
+// the specific shape.
+var proxyOutputSchema = json.RawMessage(`{"type":"object","description":"The named tool's own result, matching that tool's output schema as reported by list_tools."}`)
+
 type CallToolInput struct {
 	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
 	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
@@ -241,9 +248,10 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 	// Registered untyped so the wrapped tool's result passes through unchanged
 	// rather than being re-wrapped in an envelope of call_tool's own.
 	proxy := &mcp.Tool{
-		Name:        "call_tool",
-		Description: "Runs one of this server's read-only tools by name. Use this when list_tools reports a tool with run_with call_tool that is not in your own list of available tools. Arguments must match that tool's input schema, which list_tools returns when given a tool_name.",
-		InputSchema: schema.SchemaFromStruct(CallToolInput{}),
+		Name:         "call_tool",
+		Description:  "Runs one of this server's read-only tools by name. Use this when list_tools reports a tool with run_with call_tool that is not in your own list of available tools. Arguments must match that tool's input schema, which list_tools returns when given a tool_name.",
+		InputSchema:  schema.SchemaFromStruct(CallToolInput{}),
+		OutputSchema: proxyOutputSchema,
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
 			IdempotentHint:  false,
@@ -301,9 +309,10 @@ type CallWriteToolInput struct {
 // allow" on reads never silently covers a mutation.
 func (a *App) registerCallWriteToolTool(_ context.Context) error {
 	proxy := &mcp.Tool{
-		Name:        "call_write_tool",
-		Description: "Runs one of this server's state-changing tools by name. Use this when list_tools reports a tool with mutating true that is not in your own list of available tools. Confirm with the user before calling this, and pass arguments matching the tool's input schema from list_tools.",
-		InputSchema: schema.SchemaFromStruct(CallWriteToolInput{}),
+		Name:         "call_write_tool",
+		Description:  "Runs one of this server's state-changing tools by name. Use this when list_tools reports a tool with mutating true that is not in your own list of available tools. Confirm with the user before calling this, and pass arguments matching the tool's input schema from list_tools.",
+		InputSchema:  schema.SchemaFromStruct(CallWriteToolInput{}),
+		OutputSchema: proxyOutputSchema,
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(true),
 			IdempotentHint:  false,
