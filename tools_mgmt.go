@@ -206,7 +206,8 @@ func (a *App) registerUpdateEnvironmentTool(_ context.Context) error {
 		Name:        "update_environment",
 		Description: "Updates an existing workspace environment. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/environment",
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: utils.Ptr(false),
+			// Overwrites the fields it is given, so not additive-only.
+			DestructiveHint: utils.Ptr(true),
 			IdempotentHint:  false,
 			OpenWorldHint:   utils.Ptr(false),
 			ReadOnlyHint:    false,
@@ -400,7 +401,8 @@ func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
 		Name:        "update_api_key",
 		Description: "Updates an existing API key. Can change name, description, status (enabled/disabled), and rate limit. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: utils.Ptr(false),
+			// Overwrites the fields it is given, so not additive-only.
+			DestructiveHint: utils.Ptr(true),
 			IdempotentHint:  false,
 			OpenWorldHint:   utils.Ptr(false),
 			ReadOnlyHint:    false,
