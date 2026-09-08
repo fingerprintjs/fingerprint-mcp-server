@@ -191,9 +191,9 @@ type ListToolsOutput struct {
 // proxyOutputSchema is what both proxies return: the named tool's own result,
 // passed through untouched. The union over every target cannot be written as
 // one schema, and naming a single tool's shape would be a lie for the rest, so
-// this declares only what holds for all of them and points at list_tools for
-// the specific shape.
-var proxyOutputSchema = json.RawMessage(`{"type":"object","description":"The named tool's own result, matching that tool's output schema as reported by list_tools."}`)
+// this declares only what holds for all of them. The specific shape is the
+// target's outputSchema in tools/list; list_tools reports input schemas only.
+var proxyOutputSchema = json.RawMessage(`{"type":"object","description":"The named tool's own result, matching that tool's outputSchema in the MCP tools/list response."}`)
 
 type CallToolInput struct {
 	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
