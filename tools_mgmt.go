@@ -399,7 +399,7 @@ func (a *App) registerCreateAPIKeyTool(_ context.Context) error {
 func (a *App) registerUpdateAPIKeyTool(_ context.Context) error {
 	addWriteTool(a, &mcp.Tool{
 		Name:        "update_api_key",
-		Description: "Updates an existing API key. Can change name, description, status (enabled/disabled), and rate limit. Only provided fields are changed. For schema, see mcp resource fingerprint://schemas/api-key",
+		Description: "Updates an existing API key. Can change name, description, status (enabled/disabled), and rate limit. Omitting name, description or rate_limit leaves that field alone, but omitting status re-enables a disabled key, so send status on every update to a key you want to stay disabled. For schema, see mcp resource fingerprint://schemas/api-key",
 		Annotations: &mcp.ToolAnnotations{
 			// Overwrites the fields it is given, so not additive-only.
 			DestructiveHint: utils.Ptr(true),
