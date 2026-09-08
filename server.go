@@ -634,6 +634,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// session_id below is what ties the call back to the handshake.
 		var clientImpl *mcp.Implementation
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
+			// Not redundant with ClientInfo() below: that reads _meta, which a
+			// legacy initialize does not carry, then falls back to the session,
+			// which the initialize handler only populates after this middleware
+			// has run. Drop this branch and every pre-2026-07-28 client goes
+			// unnamed.
 			clientImpl = ir.Params.ClientInfo
 		} else if cir, ok := req.(interface{ ClientInfo() *mcp.Implementation }); ok {
 			clientImpl = cir.ClientInfo()

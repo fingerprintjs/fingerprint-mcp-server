@@ -1538,6 +1538,63 @@ func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, s
 	return string(signed)
 }
 
+// A pre-2026-07-28 client names itself in the initialize params and nowhere
+// else: no _meta, and the session is not carrying the params yet while the
+// initialize call is still in flight. The SDK client handshakes with
+// server/discover now, so no other test exercises this path, and without it
+// the analytics middleware silently stops attributing every current client.
+func TestAnalytics_LegacyInitializeCarriesClientName(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newRecordingEmitter()
+
+	ts := setupTestServerWithEmitter(t, &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}, emitter)
+
+	const subID = "sub_legacy_init"
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", subID)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"legacy-client","version":"3"}}}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	defer resp.Body.Close()
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initialize status = %d, want 200", resp.StatusCode)
+	}
+
+	var found bool
+	for _, ev := range emitter.snapshot() {
+		if ev.Type != "mcp_method_called" || ev.Properties["method"] != "initialize" {
+			continue
+		}
+		found = true
+		if got := ev.Properties["client_name"]; got != "legacy-client" {
+			t.Errorf("client_name=%v, want legacy-client", got)
+		}
+		if got := ev.Properties["client_version"]; got != "3" {
+			t.Errorf("client_version=%v, want 3", got)
+		}
+	}
+	if !found {
+		t.Error("no mcp_method_called event for initialize")
+	}
+}
+
 func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
