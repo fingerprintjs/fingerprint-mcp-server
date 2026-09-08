@@ -889,10 +889,10 @@ func TestSearchEvents_ZeroLimit(t *testing.T) {
 	})
 
 	session := mustConnectMCPClient(t, ts.URL, defaultAuthToken)
-	// The MCP SDK validates the schema before the handler runs,
-	// so limit=0 with minimum:1 is rejected at protocol level.
-	_, err := callTool(t, session, "search_events", map[string]any{"limit": 0})
-	if err == nil {
+	// Rejected either at protocol level, when the SDK validates limit=0 against
+	// minimum:1 before the handler runs, or by the handler's own guard.
+	result, err := callTool(t, session, "search_events", map[string]any{"limit": 0})
+	if err == nil && !result.IsError {
 		t.Error("expected error for zero limit")
 	}
 }
@@ -1538,6 +1538,63 @@ func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, s
 	return string(signed)
 }
 
+// A pre-2026-07-28 client names itself in the initialize params and nowhere
+// else: no _meta, and the session is not carrying the params yet while the
+// initialize call is still in flight. The SDK client handshakes with
+// server/discover now, so no other test exercises this path, and without it
+// the analytics middleware silently stops attributing every current client.
+func TestAnalytics_LegacyInitializeCarriesClientName(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+	emitter := newRecordingEmitter()
+
+	ts := setupTestServerWithEmitter(t, &config.Config{
+		PublicMode:   true,
+		JwtPublicKey: pubPEM,
+		Transport:    "streamable-http",
+	}, emitter)
+
+	const subID = "sub_legacy_init"
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", subID)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"legacy-client","version":"3"}}}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	defer resp.Body.Close()
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initialize status = %d, want 200", resp.StatusCode)
+	}
+
+	var found bool
+	for _, ev := range emitter.snapshot() {
+		if ev.Type != "mcp_method_called" || ev.Properties["method"] != "initialize" {
+			continue
+		}
+		found = true
+		if got := ev.Properties["client_name"]; got != "legacy-client" {
+			t.Errorf("client_name=%v, want legacy-client", got)
+		}
+		if got := ev.Properties["client_version"]; got != "3" {
+			t.Errorf("client_version=%v, want 3", got)
+		}
+	}
+	if !found {
+		t.Error("no mcp_method_called event for initialize")
+	}
+}
+
 func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
@@ -1559,7 +1616,7 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 
 	session := mustConnectMCPClient(t, ts.URL, token)
 
-	// initialize is implicit on Connect. Drive a tools/list to land an event.
+	// The handshake is implicit on Connect. Drive a tools/list to land an event.
 	if _, err := session.ListTools(context.Background(), &mcp.ListToolsParams{}); err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -1570,7 +1627,7 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	}
 
 	methods := map[string]bool{}
-	var sawInitializeWithClientName bool
+	var sawHandshakeWithClientName bool
 	for _, ev := range events {
 		if ev.Type != "mcp_method_called" || ev.SubscriptionID != subID {
 			continue
@@ -1587,29 +1644,29 @@ func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 		if _, ok := ev.Properties["duration_ms"]; !ok {
 			t.Errorf("%s: missing duration_ms property", method)
 		}
-		// initialize is the only method that carries client_name/client_version.
-		if method == "initialize" {
+		// The handshake is the method that carries client_name/client_version.
+		if method == "initialize" || method == "server/discover" {
 			if ev.Properties["client_name"] != "test-client" {
-				t.Errorf("initialize: client_name=%v, want test-client", ev.Properties["client_name"])
+				t.Errorf("%s: client_name=%v, want test-client", method, ev.Properties["client_name"])
 			}
-			sawInitializeWithClientName = true
+			sawHandshakeWithClientName = true
 		}
 	}
-	if !methods["initialize"] {
-		t.Errorf("expected an mcp_method_called event with method=initialize, got methods=%v", methods)
+	if !methods["initialize"] && !methods["server/discover"] {
+		t.Errorf("expected an mcp_method_called event for the handshake, got methods=%v", methods)
 	}
 	if !methods["tools/list"] {
 		t.Errorf("expected an mcp_method_called event with method=tools/list, got methods=%v", methods)
 	}
-	if !sawInitializeWithClientName {
-		t.Errorf("expected the initialize event to carry client_name in Properties")
+	if !sawHandshakeWithClientName {
+		t.Errorf("expected the handshake event to carry client_name in Properties")
 	}
 }
 
 // The inspector and the analytics event are the two halves of the same
 // request, and nothing links them unless both report the client's session id.
 // This is what makes an inspected request attributable to the client that
-// named itself on initialize.
+// named itself on the handshake.
 func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
 	const sessionID = "N7QHUFURVHGG3X4OAOOPEHPNVY"
 
@@ -1710,10 +1767,11 @@ func TestInspector_SeesMCPMethodAndLeavesTheBodyIntact(t *testing.T) {
 	for _, info := range ins.snapshot() {
 		seen[info.MCPMethod] = true
 	}
-	for _, want := range []string{"initialize", "tools/list"} {
-		if !seen[want] {
-			t.Errorf("inspector never saw MCPMethod=%q, saw %v", want, seen)
-		}
+	if !seen["initialize"] && !seen["server/discover"] {
+		t.Errorf("inspector never saw the handshake method, saw %v", seen)
+	}
+	if !seen["tools/list"] {
+		t.Errorf("inspector never saw MCPMethod=\"tools/list\", saw %v", seen)
 	}
 	// GET and DELETE carry no body, so they must report unknown rather than
 	// inheriting a method from a previous request.

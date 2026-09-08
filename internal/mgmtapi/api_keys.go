@@ -99,6 +99,8 @@ type UpdateAPIKeyRequest struct {
 	// Description is the API key description (3-255 characters).
 	Description *string `json:"description,omitempty"`
 	// Status enables or disables the key. Values: "enabled", "disabled".
+	// Omitting it does not leave the status alone: the endpoint clears
+	// disabled_at, which re-enables a disabled key.
 	Status *string `json:"status,omitempty"`
 	// RateLimit is the requests-per-second limit. Minimum: 0.1.
 	RateLimit *float64 `json:"rate_limit,omitempty"`

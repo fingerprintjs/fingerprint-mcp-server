@@ -627,21 +627,25 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if pr, ok := req.(*mcp.GetPromptRequest); ok {
 			promptName = pr.Params.Name
 		}
-		// initialize carries ClientInfo in its own params; later methods can only
-		// get it from the session. In stateless mode the session is torn down per
-		// request, so this recovers the client on subsequent calls only when the
-		// server is running stateful. Where it can't, session_id below is what
-		// ties the call back to the initialize that named the client.
+		// A client handshakes with either initialize or server/discover, and only
+		// the handshake names the client directly: initialize in its own params,
+		// discover in _meta. Later methods get it from the session, which in
+		// stateless mode is torn down per request; where that leaves it empty,
+		// session_id below is what ties the call back to the handshake.
+		var clientImpl *mcp.Implementation
 		if ir, ok := req.(*mcp.ServerRequest[*mcp.InitializeParams]); ok {
-			if ci := ir.Params.ClientInfo; ci != nil {
-				clientName = ci.Name
-				clientVersion = ci.Version
-			}
-		} else if ss, ok := req.GetSession().(*mcp.ServerSession); ok && ss != nil {
-			if ip := ss.InitializeParams(); ip != nil && ip.ClientInfo != nil {
-				clientName = ip.ClientInfo.Name
-				clientVersion = ip.ClientInfo.Version
-			}
+			// Not redundant with ClientInfo() below: that reads _meta, which a
+			// legacy initialize does not carry, then falls back to the session,
+			// which the initialize handler only populates after this middleware
+			// has run. Drop this branch and every pre-2026-07-28 client goes
+			// unnamed.
+			clientImpl = ir.Params.ClientInfo
+		} else if cir, ok := req.(interface{ ClientInfo() *mcp.Implementation }); ok {
+			clientImpl = cir.ClientInfo()
+		}
+		if clientImpl != nil {
+			clientName = clientImpl.Name
+			clientVersion = clientImpl.Version
 		}
 		// Version is optional in the protocol, and "myclient/" reads like a
 		// truncated value rather than an absent one.
