@@ -119,6 +119,7 @@ func (a *auditInspector) deliver(info requestinspect.Info) {
 		"remote_port", info.RemotePort,
 		"forwarded_for", info.Header.Get("X-Forwarded-For"),
 		"user_agent", info.Header.Get("User-Agent"),
+		"client_name", info.ClientName,
 		"header_count", len(info.Header),
 	)
 }
