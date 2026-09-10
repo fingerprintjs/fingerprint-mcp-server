@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -1736,7 +1737,7 @@ func TestAnalytics_SessionIDMatchesTheInspectedRequest(t *testing.T) {
 // The inspector has to see the JSON-RPC method so it can skip work for
 // methods that carry no signal, and it has to do that without eating the body
 // the handler still needs.
-func TestInspector_SeesMCPMethodAndLeavesTheBodyIntact(t *testing.T) {
+func TestInspector_SeesMCPMethodAndClientNameAndLeavesTheBodyIntact(t *testing.T) {
 	ins := newRecordingInspector()
 	privKey, pubPEM := generateES256KeyPEM(t)
 	cfg := &config.Config{PublicMode: true, JwtPublicKey: pubPEM, Transport: "streamable-http"}
@@ -1779,6 +1780,182 @@ func TestInspector_SeesMCPMethodAndLeavesTheBodyIntact(t *testing.T) {
 		if info.Method != http.MethodPost && info.MCPMethod != "" {
 			t.Errorf("%s carried MCPMethod=%q, want empty", info.Method, info.MCPMethod)
 		}
+		if info.Method != http.MethodPost && info.ClientName != "" {
+			t.Errorf("%s carried ClientName=%q, want empty", info.Method, info.ClientName)
+		}
+	}
+
+	// The SDK client marshals mcp.MetaKeyClientInfo itself, so an upstream rename
+	// fails here rather than silently reporting no client.
+	named := map[string]bool{}
+	for _, info := range ins.snapshot() {
+		if info.ClientName != "" {
+			named[info.MCPMethod] = true
+			if info.ClientName != "test-client" {
+				t.Errorf("%s carried ClientName=%q, want \"test-client\"", info.MCPMethod, info.ClientName)
+			}
+		}
+	}
+	if !named["tools/list"] {
+		t.Errorf("tools/list carried no ClientName, named methods: %v", named)
+	}
+}
+
+func TestPeek_ResolvesClientName(t *testing.T) {
+	const metaKey = "io.modelcontextprotocol/clientInfo"
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"legacy initialize", `{"method":"initialize","params":{"clientInfo":{"name":"claude-code"}}}`, "claude-code"},
+		{"discover via meta", `{"method":"server/discover","params":{"_meta":{"` + metaKey + `":{"name":"claude-code"}}}}`, "claude-code"},
+		{"tool call via meta", `{"method":"tools/call","params":{"_meta":{"` + metaKey + `":{"name":"cursor-vscode"}},"name":"get_current_time"}}`, "cursor-vscode"},
+		{"params wins over meta", `{"method":"initialize","params":{"clientInfo":{"name":"real"},"_meta":{"` + metaKey + `":{"name":"relay"}}}}`, "real"},
+		{"meta without client info", `{"method":"tools/list","params":{"_meta":{"progressToken":1}}}`, ""},
+		{"no params", `{"method":"ping"}`, ""},
+		{"hostile params shape", `{"method":"ping","params":5}`, ""},
+		{"spaces are kept", `{"method":"initialize","params":{"clientInfo":{"name":"openai-mcp (Agent Builder)"}}}`, "openai-mcp (Agent Builder)"},
+		{"non-ascii is kept", `{"method":"initialize","params":{"clientInfo":{"name":"клиент"}}}`, "клиент"},
+		{"empty name", `{"method":"initialize","params":{"clientInfo":{"name":""}}}`, ""},
+		{"newline injects a log line", `{"method":"initialize","params":{"clientInfo":{"name":"a\nlevel=ERROR fake"}}}`, ""},
+		{"tab", `{"method":"initialize","params":{"clientInfo":{"name":"a\tb"}}}`, ""},
+		{"null byte", `{"method":"initialize","params":{"clientInfo":{"name":"a\u0000"}}}`, ""},
+		{"at the cap", `{"method":"initialize","params":{"clientInfo":{"name":"` + strings.Repeat("a", maxClientNameLen) + `"}}}`, strings.Repeat("a", maxClientNameLen)},
+		{"over the cap", `{"method":"initialize","params":{"clientInfo":{"name":"` + strings.Repeat("a", maxClientNameLen+1) + `"}}}`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(tc.body))
+			if got := peekMCPRequest(r).clientName(); got != tc.want {
+				t.Errorf("clientName() = %q, want %q", got, tc.want)
+			}
+			rest, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("reading body back: %v", err)
+			}
+			if string(rest) != tc.body {
+				t.Errorf("body after peek = %q, want %q", rest, tc.body)
+			}
+		})
+	}
+
+	t.Run("GET carries no body", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+		peek := peekMCPRequest(r)
+		if peek.Method != "" || peek.clientName() != "" {
+			t.Errorf("GET gave method=%q client=%q, want both empty", peek.Method, peek.clientName())
+		}
+	})
+}
+
+func TestPeek_LargeBodyReportsUnknown(t *testing.T) {
+	const metaKey = "io.modelcontextprotocol/clientInfo"
+	body := `{"method":"tools/call","params":{"name":"search_events","arguments":{"q":"` +
+		strings.Repeat("x", mcpMethodPeekBytes) + `"},"_meta":{"` + metaKey + `":{"name":"claude-code"}}}}`
+
+	r := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	peek := peekMCPRequest(r)
+	if peek.Method != "" {
+		t.Errorf("MCPMethod = %q, want empty past the peek window", peek.Method)
+	}
+	if got := peek.clientName(); got != "" {
+		t.Errorf("clientName() = %q, want empty past the peek window", got)
+	}
+	rest, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatalf("reading body back: %v", err)
+	}
+	if string(rest) != body {
+		t.Errorf("body after peek was %d bytes, want %d", len(rest), len(body))
+	}
+}
+
+// Hand-POSTed: the SDK client handshakes with server/discover and can no longer
+// produce a 2025-06-18 initialize.
+func TestInspector_SeesClientNameFromLegacyInitialize(t *testing.T) {
+	ins := newRecordingInspector()
+	privKey, pubPEM := generateES256KeyPEM(t)
+	cfg := &config.Config{PublicMode: true, JwtPublicKey: pubPEM, Transport: "streamable-http"}
+	ts := setupTestServerWithInspector(t, cfg, ins, nil)
+
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_legacy_inspect")
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"legacy-client","version":"3"}}}`
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	defer resp.Body.Close()
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initialize status = %d, want 200", resp.StatusCode)
+	}
+
+	var found bool
+	for _, info := range ins.snapshot() {
+		if info.MCPMethod != "initialize" {
+			continue
+		}
+		found = true
+		if info.ClientName != "legacy-client" {
+			t.Errorf("ClientName = %q, want legacy-client", info.ClientName)
+		}
+	}
+	if !found {
+		t.Error("inspector never saw the legacy initialize")
+	}
+}
+
+// Asserting the tool result matters: a name-only assertion still passes with a
+// truncated body.
+func TestInspector_LeavesTheBodyIntactOnAClientNamedCall(t *testing.T) {
+	ins := newRecordingInspector()
+	privKey, pubPEM := generateES256KeyPEM(t)
+	cfg := &config.Config{PublicMode: true, JwtPublicKey: pubPEM, Transport: "streamable-http"}
+	ts := setupTestServerWithInspector(t, cfg, ins, nil)
+
+	token := signFpjsJWTWithSubID(t, privKey, "test-server-key-test-mgmt-key-us", "sub_tool_call")
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:   ts.URL + "/mcp",
+		HTTPClient: &http.Client{Transport: &authRoundTripper{token: token, base: http.DefaultTransport}},
+	}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect MCP client: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_current_time"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("get_current_time returned an error result: %+v", res.Content)
+	}
+
+	var found bool
+	for _, info := range ins.snapshot() {
+		if info.MCPMethod != "tools/call" {
+			continue
+		}
+		found = true
+		if info.ClientName != "test-client" {
+			t.Errorf("ClientName = %q, want test-client", info.ClientName)
+		}
+	}
+	if !found {
+		t.Error("inspector never saw the tools/call")
 	}
 }
 

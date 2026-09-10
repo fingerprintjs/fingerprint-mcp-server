@@ -59,6 +59,15 @@ type Info struct {
 	// not appear in the bytes the server peeked at. Treat an empty value as
 	// a request to handle normally rather than one to skip.
 	MCPMethod string
+
+	// ClientName is the MCP client's self-declared name, read from the same
+	// bytes as MCPMethod. It exists because the User-Agent is the transport's
+	// rather than the client's: every integration on the Python SDK reports
+	// python-httpx, so it cannot tell them apart.
+	//
+	// Empty means "not known", never "no name". Expect it on the handshake;
+	// on a tool call the name often falls outside the peeked bytes.
+	ClientName string
 }
 
 // Inspector receives request metadata for analysis and logging. It is kept

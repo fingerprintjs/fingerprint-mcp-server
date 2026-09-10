@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/fingerprintjs/fingerprint-mcp-server/analytics"
 	"github.com/fingerprintjs/fingerprint-mcp-server/config"
@@ -500,13 +502,15 @@ func (a *App) inspectMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		ip, port := splitRemoteAddr(r.RemoteAddr)
+		peek := peekMCPRequest(r)
 		if err := ins.Inspect(r.Context(), requestinspect.Info{
 			Method:     r.Method,
 			URL:        r.URL,
 			Header:     r.Header,
 			RemoteIP:   ip,
 			RemotePort: port,
-			MCPMethod:  peekMCPMethod(r),
+			MCPMethod:  peek.Method,
+			ClientName: peek.clientName(),
 		}); err != nil {
 			a.opts.logger().Error("request inspector failed", "err", err, "remote_ip", ip)
 		}
@@ -514,21 +518,66 @@ func (a *App) inspectMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// mcpMethodPeekBytes bounds how much of a body is read to find the method
-// name. A ping is under 60 bytes and the SDK puts "method" near the front,
-// so this is generous for the case it exists to catch while staying far
-// below any real tool-call payload.
+// mcpMethodPeekBytes bounds how much of a body is read to find the method name
+// and the client's name. A ping is under 60 bytes and the SDK puts "method"
+// near the front, so this is generous for the case it exists to catch while
+// staying far below any real tool-call payload.
 const mcpMethodPeekBytes = 1 << 10
 
-// peekMCPMethod reads the JSON-RPC method name from the front of the request
-// body without consuming it: the bytes read are put back in front of the
-// remainder, so the handler still sees the whole body.
+const maxClientNameLen = 128
+
+// The _meta key is mcp.MetaKeyClientInfo, which a struct tag can't reference.
+type mcpProbe struct {
+	Method string `json:"method"`
+	Params struct {
+		ClientInfo *implProbe `json:"clientInfo"`
+		Meta       struct {
+			ClientInfo *implProbe `json:"io.modelcontextprotocol/clientInfo"`
+		} `json:"_meta"`
+	} `json:"params"`
+}
+
+type implProbe struct {
+	Name string `json:"name"`
+}
+
+// params.clientInfo wins over _meta so this agrees with loggingMiddleware about
+// who made a given call.
+func (p mcpProbe) clientName() string {
+	if ci := p.Params.ClientInfo; ci != nil && validClientName(ci.Name) {
+		return ci.Name
+	}
+	if ci := p.Params.Meta.ClientInfo; ci != nil && validClientName(ci.Name) {
+		return ci.Name
+	}
+	return ""
+}
+
+// Not validSessionID: the name is free-form UTF-8, and real ones carry spaces,
+// as in "openai-mcp (Agent Builder)".
+func validClientName(name string) bool {
+	if name == "" || len(name) > maxClientNameLen || !utf8.ValidString(name) {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// peekMCPRequest reads the method name and the client's name from the front of
+// the request body without consuming it: the bytes read are put back in front
+// of the remainder, so the handler still sees the whole body.
 //
-// It returns "" whenever the name cannot be read cheaply, which callers must
-// treat as unknown rather than as a method they can act on.
-func peekMCPMethod(r *http.Request) string {
+// Every field is empty for a body over mcpMethodPeekBytes, not just one whose
+// value fell past the window: encoding/json discards a truncated value rather
+// than keeping what it already scanned.
+func peekMCPRequest(r *http.Request) mcpProbe {
+	var probe mcpProbe
 	if r.Method != http.MethodPost || r.Body == nil {
-		return ""
+		return probe
 	}
 	buf := make([]byte, mcpMethodPeekBytes)
 	n, readErr := io.ReadFull(r.Body, buf)
@@ -542,16 +591,11 @@ func peekMCPMethod(r *http.Request) string {
 		io.Closer
 	}{io.MultiReader(bytes.NewReader(buf), r.Body), r.Body}
 	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
-		return ""
+		return mcpProbe{}
 	}
 
-	var probe struct {
-		Method string `json:"method"`
-	}
-	// A truncated peek is not valid JSON, so decode leniently and take
-	// whatever was parsed before the error.
 	_ = json.NewDecoder(bytes.NewReader(buf)).Decode(&probe)
-	return probe.Method
+	return probe
 }
 
 // splitRemoteAddr splits an http.Request.RemoteAddr of the form "ip:port"
