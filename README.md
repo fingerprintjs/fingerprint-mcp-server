@@ -15,7 +15,7 @@
 - Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
 - **Event tools**: Retrieve and search identification and Automation Intelligence (edge) events with full smart signal data
 - **Management tools**: Manage workspace environments and API keys
-- **Onboarding prompt**: Guided setup for integrating Fingerprint into a project
+- **Onboarding prompt**: Points agents at the [Fingerprint skills repo](https://github.com/fingerprintjs/skills) for the full Get Started flow
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
 - OAuth2 login supported
@@ -271,7 +271,7 @@ Event tools require a Server API key. Management tools require a Management API 
 
 ## Available Prompts
 
-- **`onboarding`** — A guided walkthrough for integrating Fingerprint into a project, covering JavaScript Agent installation, API key setup, and verification steps.
+- **`onboarding`** — Serves the Get Started flow from the [Fingerprint skills repo](https://github.com/fingerprintjs/skills), where the per-stack integration skills are maintained. The server fetches the skill (cached for an hour) and inlines it, so clients without a fetch tool of their own still get the guidance; if the skills repo is unreachable, the prompt tells the client where to fetch it instead. Pass `WithGetStartedSkillURL("")` to disable the fetch.
 
 ## License
 

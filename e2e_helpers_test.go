@@ -267,7 +267,11 @@ func setupStdioServer(t *testing.T, cfg *config.Config) *mcp.ClientSession {
 func setupTestServerWithLogger(t *testing.T, cfg *config.Config, logger *slog.Logger) *httptest.Server {
 	t.Helper()
 
-	app, err := New(cfg, &opts{l: logger})
+	o := &opts{l: logger}
+	// No test should reach GitHub for the Get Started skill.
+	WithGetStartedSkillURL("")(o)
+
+	app, err := New(cfg, o)
 	if err != nil {
 		t.Fatalf("failed to create app: %v", err)
 	}
@@ -469,7 +473,10 @@ func setupTestServerWithInspector(t *testing.T, cfg *config.Config, inspector re
 func setupTestServerWithEmitter(t *testing.T, cfg *config.Config, emitter analytics.Emitter) *httptest.Server {
 	t.Helper()
 
-	app, err := New(cfg, &opts{emitter: emitter})
+	o := &opts{emitter: emitter}
+	WithGetStartedSkillURL("")(o)
+
+	app, err := New(cfg, o)
 	if err != nil {
 		t.Fatalf("failed to create app: %v", err)
 	}
@@ -500,7 +507,10 @@ func setupTestServerWithInspectorAndEmitter(
 ) *httptest.Server {
 	t.Helper()
 
-	app, err := New(cfg, &opts{inspector: inspector, emitter: emitter})
+	o := &opts{inspector: inspector, emitter: emitter}
+	WithGetStartedSkillURL("")(o)
+
+	app, err := New(cfg, o)
 	if err != nil {
 		t.Fatalf("failed to create app: %v", err)
 	}

@@ -41,6 +41,7 @@ type App struct {
 	version      string
 	appName      string
 	tools        []registeredTool
+	getStarted   *remoteSkill
 }
 
 type opts struct {
@@ -49,6 +50,9 @@ type opts struct {
 	inspector requestinspect.Inspector
 	version   string
 	appName   string
+	// A pointer so an explicitly empty string (disabled) stays distinguishable
+	// from an unset field (use the default).
+	getStartedSkillURL *string
 }
 
 func (o opts) logger() *slog.Logger {
@@ -63,6 +67,13 @@ func (o opts) analyticsEmitter() analytics.Emitter {
 		return o.emitter
 	}
 	return analytics.Noop()
+}
+
+func (o opts) getStartedURL() string {
+	if o.getStartedSkillURL != nil {
+		return *o.getStartedSkillURL
+	}
+	return defaultGetStartedURL
 }
 
 type OptFunc func(o *opts)
@@ -103,6 +114,16 @@ func WithVersion(v string) OptFunc {
 func WithAppName(appName string) OptFunc {
 	return func(o *opts) {
 		o.appName = appName
+	}
+}
+
+// WithGetStartedSkillURL overrides where the onboarding prompt fetches the
+// maintained Get Started skill from. Pass an empty string to disable fetching,
+// which suits a deployment with no egress: the prompt then tells the client to
+// fetch the skill itself. Defaults to the public skills repo on GitHub.
+func WithGetStartedSkillURL(u string) OptFunc {
+	return func(o *opts) {
+		o.getStartedSkillURL = &u
 	}
 }
 
@@ -188,6 +209,11 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 		opts:    opts,
 		version: v,
 		appName: appName,
+		getStarted: &remoteSkill{
+			url:   opts.getStartedURL(),
+			ttl:   getStartedTTL,
+			strip: true,
+		},
 	}
 	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 
