@@ -4,7 +4,7 @@ Tools, resources, and prompts for the Fingerprint device intelligence platform (
 
 - **Events**: `get_event`, `search_events` cover two kinds of event. Identification events (JS Agent or mobile SDK) return `visitor_id`, browser and device details, and the full smart signal set. Automation Intelligence (edge) events return only request and IP derived fields (`ip_info`, `proxy`, `vpn`, `bot_info`, `url`, `tags`, `timestamp`) and have no `visitor_id`.
 - **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
-- **Onboarding**: the `Fingerprint Onboarding Guide` prompt walks through JS Agent install and event verification.
+- **Onboarding**: the `Fingerprint Onboarding Guide` prompt serves the Get Started flow from the Fingerprint skills repo, where the integration guidance is maintained.
 - **Schemas**: event, environment, and API key schemas are exposed as resources.
 - **Discovery**: `list_tools` reports the tools this server is serving right now. `call_tool` runs the read-only ones, `call_write_tool` the ones that change state.
 

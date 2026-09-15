@@ -1,26 +1,38 @@
 ---
 name: Fingerprint Onboarding Guide
-description: Use this guide to help onboard Fingerprint into a project.
+description: Use this guide to integrate Fingerprint into a project: frontend identification, server-side verification, and the rest of the Get Started flow.
 ---
 
 Fingerprint helps teams prevent fraud, improve user experiences, and better understand their traffic.
 
-To start using Fingerprint, one needs to begin with installing JS Agent on their webpage as described in the guide below. To confirm that installation is successful, one needs to check if requests successfully reach Fingerprint servers. To do it, one needs to either use Fingerprint MCP Tool `search_events` to query recent events, or to query Server API directly using instructions below.
+The integration guidance is maintained in the Fingerprint skills repo, https://github.com/fingerprintjs/skills, so it always matches the current SDKs.
 
-Some users might want to create a new demo page from scratch while others want to integrate Fingerprint into an existing project—assistant should ask which option user prefers. When integrating into an existing project, assistant should ask the user on what pages of their website they would like to invoke Fingerprint, e.g.: main page only/checkout page only/all pages/etc. Some may choose to only call Fingerprint on selected pages, while others might want to do it on every single page of the website.
+## Get Started
 
-To communicate to Fingerprint, one needs a Public API key that is used by the JS Agent and exposed in the webpage source, and a Secret API key used for server-to-server communications. Both types of api keys can be fetched/created using Fingerprint MCP Tools `list_api_keys`, `get_api_key` and `create_api_key`. Alternatively one can talk to the Management API directly, see instructions below. Alternatively assistant can advise users to navigate to the Fingerprint Dashboard at https://dashboard.fingerprint.com/ to check the event history manually.
+{{get_started}}
 
-Successful onboarding consists of the following steps:
+## Per-stack skills
 
-0. Important: Read the docs first: https://docs.fingerprint.com/docs/install-the-javascript-agent.md 
-1. Add JS Agent invocation to the webpage.
-2. Open the webpage in a browser
-3. Confirm there's no JS errors in the browser console
-4. Confirm the request shows up in the history fetched from Fingerprint.
+The Get Started flow names other skills by id (`fingerprint-react`, `fingerprint-node`, `fingerprint-nextjs`, `fingerprint-smart-signals`, and so on). Fetch each one at `https://raw.githubusercontent.com/fingerprintjs/skills/main/skills/<id>/SKILL.md`.
 
-References:
-- Installing JS Agent: https://docs.fingerprint.com/docs/install-the-javascript-agent.md
-- JS Agent API v4 Reference: https://docs.fingerprint.com/reference/js-agent-v4.md
-- Making Server API requests: https://docs.fingerprint.com/reference/server-api-v4.md
-- Making Management API requests: https://docs.fingerprint.com/docs/management-api.md
+Read what you need, when you need it. Do not install anything into the project or edit its agent configuration to get these files.
+
+## What this server adds
+
+You are already connected to a Fingerprint MCP server, so prefer its tools over the dashboard steps the skills describe:
+
+- `list_api_keys`, `get_api_key`, `create_api_key` for the public and secret keys the integration needs.
+- `search_events` to confirm the install works. A new event after loading the page means identification is reaching Fingerprint.
+
+## Loading the skills permanently (optional)
+
+Users who want the skills available in every session can install the plugin instead:
+
+- Claude Code: `/plugin marketplace add fingerprintjs/skills`, then `/plugin install fingerprint@fingerprint`
+- Other agents: `npx skills add https://github.com/fingerprintjs/skills`
+
+The plugin also declares a Fingerprint MCP server. Leave whatever connection is already in place alone, since it may point somewhere other than the hosted server.
+
+## Without web access
+
+Fall back to https://docs.fingerprint.com/llms.txt and follow the links from there.
