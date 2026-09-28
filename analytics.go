@@ -8,7 +8,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const methodPing = "ping"
+var trackedMethods = map[string]struct{}{
+	"tools/call":     {},
+	"prompts/get":    {},
+	"resources/read": {},
+}
 
 // analyticsInputs bundles the values emitAnalytics needs from the
 // middleware so the call site stays a single line.
@@ -45,7 +49,7 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 		return
 	}
 
-	if in.method == methodPing {
+	if _, ok := trackedMethods[in.method]; !ok {
 		return
 	}
 
