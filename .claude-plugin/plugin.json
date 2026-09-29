@@ -8,6 +8,9 @@
   },
   "homepage": "https://github.com/fingerprintjs/fingerprint-mcp-server",
   "repository": "https://github.com/fingerprintjs/fingerprint-mcp-server",
+  "license": "MIT",
+  "icon": "./icon.svg",
+  "privacyPolicyUrl": "https://docs.fingerprint.com/docs/privacy-policy",
   "keywords": ["fingerprint"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json"
