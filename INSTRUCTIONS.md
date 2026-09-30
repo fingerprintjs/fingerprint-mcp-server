@@ -12,7 +12,7 @@ Tools, resources, and prompts for the Fingerprint device intelligence platform (
 
 - Prefer `search_events` over `get_event` unless you have a specific `requestId`.
 - `search_events` returns one kind of event per call: omit `source` for identification events, pass `source: ["edge"]` for edge events, and search twice to cover both. Edge events are only searchable for the last 7 days.
-- Never report a `visitor_id` or device detail for an edge event; read what the response actually contains.
+- Each event's `source` field says which kind it is: `device` (identification) or `edge`. Never report a `visitor_id` or device detail for an edge event; read what the response actually contains.
 - `search_events` `start`/`end` are RFC3339; derive from current wall-clock time, not training data.
 - Event timestamps (`timestamp`, `first_seen_at`, `last_seen_at`) come back as RFC3339 UTC strings, read them as-is, no conversion.
 - `factory_reset_timestamp` is the exception: Unix epoch milliseconds, where `0` means no factory reset was detected.

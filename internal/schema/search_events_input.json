@@ -1,6 +1,10 @@
 {
   "additionalProperties": false,
   "properties": {
+    "active_call": {
+      "description": "Filter events by Active Call Detection result on mobile devices.\n\n\u003e Note: When using this parameter, only events with the `active_call` property set to `true` or `false` are returned. Events without an `active_call` Smart Signal result are left out of the response.\n",
+      "type": "boolean"
+    },
     "anti_detect_browser": {
       "description": "Filter events by Anti-detect Browser Detection result.\n\u003e Note: When using this parameter, only events with the `tampering_details.anti_detect_browser` property set to `true` or `false` are returned. Events without a `tampering` Smart Signal result are left out of the response.\n",
       "type": "boolean"
@@ -188,7 +192,7 @@
       "type": "integer"
     },
     "linked_id": {
-      "description": "Filter events by your custom identifier.\n\nYou can use [linked Ids](https://docs.fingerprint.com/reference/js-agent-v4-get-function#linkedid) to associate identification requests with your own identifier, for example, session Id, purchase Id, or transaction Id. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
+      "description": "Filter events by your custom identifier.\n\nYou can use [linked IDs](https://docs.fingerprint.com/reference/js-agent-get-function#linkedid) to associate identification requests with your own identifier, for example, session ID, purchase ID, or transaction ID. You can then use this `linked_id` parameter to retrieve all events associated with your custom identifier.\n",
       "examples": [
         "somelinkedId"
       ],
@@ -338,7 +342,7 @@
       "type": "boolean"
     },
     "visitor_id": {
-      "description": "Unique [visitor identifier](https://docs.fingerprint.com/reference/js-agent-v4-get-function#visitor_id) issued by Fingerprint Identification and all active Smart Signals.\n\nFilter events by matching Visitor ID (`identification.visitor_id` property).\n",
+      "description": "Unique [visitor identifier](https://docs.fingerprint.com/reference/js-agent-get-function#visitor_id) issued by Fingerprint Identification and all active Smart Signals.\n\nFilter events by matching Visitor ID (`identification.visitor_id` property).\n",
       "examples": [
         "Ibk1527CUFmcnjLwIs4A9"
       ],
