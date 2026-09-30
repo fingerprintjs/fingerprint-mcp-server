@@ -58,7 +58,7 @@ func envelopeOutputSchema(key, description string) json.RawMessage {
 }
 
 var getEventOutputSchema = envelopeOutputSchema("event",
-	"The event. An identification event has identification.visitor_id, browser and device details, geolocation, and the full smart signal set. An Automation Intelligence (edge) event has only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp) and no visitor_id. Full shape: fingerprint://schemas/event resource.")
+	"The event. Its source field is device for an identification event and edge for an Automation Intelligence event. An identification event has identification.visitor_id, browser and device details, geolocation, and the full smart signal set. An Automation Intelligence (edge) event has only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp) and no visitor_id. Full shape: fingerprint://schemas/event resource.")
 
 var searchEventsOutputSchema = envelopeOutputSchema("events",
 	"Result set: an events array of matching events, plus optional pagination_key and total_hits. Each event has the shape in the fingerprint://schemas/event resource; edge results carry no visitor_id and no device details.")
@@ -122,7 +122,7 @@ func (a *App) registerGetEventTool(_ context.Context) error {
 	// Register the get_event tool
 	addTool(a, &mcp.Tool{
 		Name:         "get_event",
-		Description:  "Retrieves a single Fingerprint event by event_id. Fingerprint has two kinds of event, both reachable through this tool: an identification event, collected by the JS Agent or a mobile SDK, returns identification.visitor_id, browser and device details, geolocation, and the full smart signal set; an Automation Intelligence (edge) event, observed server-side with no client agent, returns only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp). An edge event has no visitor_id and no device-derived signals, so read the returned fields rather than assuming either kind. For schema, see mcp resource fingerprint://schemas/event",
+		Description:  "Retrieves a single Fingerprint event by event_id. Fingerprint has two kinds of event, both reachable through this tool: an identification event, collected by the JS Agent or a mobile SDK, returns identification.visitor_id, browser and device details, geolocation, and the full smart signal set; an Automation Intelligence (edge) event, observed server-side with no client agent, returns only request and IP derived fields (ip_info, proxy, vpn, bot_info, url, tags, timestamp). An edge event has no visitor_id and no device-derived signals. The event's source field says which kind it is: device (identification) or edge. For schema, see mcp resource fingerprint://schemas/event",
 		OutputSchema: getEventOutputSchema,
 		InputSchema:  schema.PatchProductsEnum(schema.SchemaFromStruct(GetEventInput{})),
 		Annotations: &mcp.ToolAnnotations{

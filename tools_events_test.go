@@ -212,6 +212,26 @@ func TestSearchEventInputToRequest_SourceForwarded(t *testing.T) {
 	}
 }
 
+func TestSearchEventInputToRequest_MobileSignalsForwarded(t *testing.T) {
+	yes := true
+	input := schema.SearchEventInput{
+		IncrementalIdentificationStatus: "completed",
+		Simulator:                       &yes,
+		ActiveCall:                      &yes,
+	}
+	want := fingerprint.NewSearchEventsRequest().
+		IncrementalIdentificationStatus(fingerprint.SearchEventsIncrementalIdentificationStatusCompleted).
+		Simulator(true).
+		ActiveCall(true)
+	got, err := schema.SearchEventInputToRequest(&input)
+	if err != nil {
+		t.Fatalf("SearchEventInputToRequest: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("request mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 // Verifies that SearchEventInputToRequest produces a non-zero request when all input fields are set.
 func TestSearchEventInputToRequest_AllFieldsPopulated(t *testing.T) {
 	// Populate every field of SearchEventInput with a non-zero value via reflection.

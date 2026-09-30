@@ -423,6 +423,15 @@ func SearchEventInputToRequest(input *SearchEventInput) (fingerprint.SearchEvent
 	if input.TorNode != nil {
 		req = req.TorNode(*input.TorNode)
 	}
+	if s, ok := input.IncrementalIdentificationStatus.(string); ok {
+		req = req.IncrementalIdentificationStatus(fingerprint.SearchEventsIncrementalIdentificationStatus(s))
+	}
+	if input.Simulator != nil {
+		req = req.Simulator(*input.Simulator)
+	}
+	if input.ActiveCall != nil {
+		req = req.ActiveCall(*input.ActiveCall)
+	}
 	if len(input.Source) > 0 {
 		req = req.Source(toEnumSlice[fingerprint.SearchEventsSource](input.Source))
 	}

@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	github.com/alexflint/go-arg v1.6.1
-	github.com/fingerprintjs/go-sdk/v8 v8.5.0
+	github.com/fingerprintjs/go-sdk/v8 v8.8.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/modelcontextprotocol/go-sdk v1.7.0
