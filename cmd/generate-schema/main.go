@@ -475,6 +475,7 @@ var eventMetadataFields = map[string]bool{
 	"ip_address":      true,
 	"user_agent":      true,
 	"client_referrer": true,
+	"source":          true,
 }
 
 // extractProductsFields returns the sorted signal/product property names

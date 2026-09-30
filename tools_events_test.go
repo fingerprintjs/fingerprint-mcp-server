@@ -286,3 +286,16 @@ func setNonZero(t *testing.T, name string, v reflect.Value) {
 		t.Fatalf("setNonZero: unsupported kind %s for field %q", v.Kind(), name)
 	}
 }
+
+func TestFilterProducts_KeepsSource(t *testing.T) {
+	src := fingerprint.EventSourceEdge
+	incognito := true
+	event := fingerprint.Event{Source: &src, Incognito: &incognito}
+	schema.FilterProducts(&event, []string{"bot"})
+	if event.Source == nil || *event.Source != fingerprint.EventSourceEdge {
+		t.Errorf("source was filtered out: %v", event.Source)
+	}
+	if event.Incognito != nil {
+		t.Error("incognito should be filtered out")
+	}
+}
