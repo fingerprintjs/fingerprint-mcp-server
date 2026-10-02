@@ -1,15 +1,16 @@
-Tools, resources, and prompts for the Fingerprint device intelligence platform (https://fingerprint.com).
+Tools and resources for the Fingerprint device intelligence platform (https://fingerprint.com).
 
 ## Capabilities
 
 - **Events**: `get_event`, `search_events` cover two kinds of event. Identification events (JS Agent or mobile SDK) return `visitor_id`, browser and device details, and the full smart signal set. Automation Intelligence (edge) events return only request and IP derived fields (`ip_info`, `proxy`, `vpn`, `bot_info`, `url`, `tags`, `timestamp`) and have no `visitor_id`.
 - **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
-- **Onboarding**: the `Fingerprint Onboarding Guide` prompt serves the Get Started flow from the Fingerprint skills repo, where the integration guidance is maintained.
+- **Skills**: `list_skills` lists the maintained Fingerprint skills: integration guides per frontend framework and backend language, first-party deployment through a custom subdomain or proxy, Smart Signals, the Rules Engine. Load one with `get_skill` and the snippets it refers to with `get_skill_file`, both through `call_tool`.
 - **Schemas**: event, environment, and API key schemas are exposed as resources.
 - **Discovery**: `list_tools` reports the tools this server is serving right now. `call_tool` runs the read-only ones, `call_write_tool` the ones that change state.
 
 ## Guidance
 
+- When the user wants to integrate or configure Fingerprint, call `list_skills` and follow the matching skill instead of writing the integration from memory.
 - Prefer `search_events` over `get_event` unless you have a specific `requestId`.
 - `search_events` returns one kind of event per call: omit `source` for identification events, pass `source: ["edge"]` for edge events, and search twice to cover both. Edge events are only searchable for the last 7 days.
 - Each event's `source` field says which kind it is: `device` (identification) or `edge`. Never report a `visitor_id` or device detail for an edge event; read what the response actually contains.

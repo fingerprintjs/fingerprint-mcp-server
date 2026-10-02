@@ -262,14 +262,13 @@ func setupStdioServer(t *testing.T, cfg *config.Config) *mcp.ClientSession {
 }
 
 // setupTestServerWithLogger is like setupTestServer but also registers
-// resources and prompts and uses the given logger so tests can inspect
+// resources and a test prompt and uses the given logger so tests can inspect
 // what loggingMiddleware emits.
 func setupTestServerWithLogger(t *testing.T, cfg *config.Config, logger *slog.Logger) *httptest.Server {
 	t.Helper()
 
 	o := &opts{l: logger}
-	// No test should reach GitHub for the Get Started skill.
-	WithGetStartedSkillURL("")(o)
+	WithSkillsRepo("", "")(o)
 
 	app, err := New(cfg, o)
 	if err != nil {
@@ -283,9 +282,9 @@ func setupTestServerWithLogger(t *testing.T, cfg *config.Config, logger *slog.Lo
 	if err := app.registerResources(ctx); err != nil {
 		t.Fatalf("failed to register resources: %v", err)
 	}
-	if err := app.registerPrompts(ctx); err != nil {
-		t.Fatalf("failed to register prompts: %v", err)
-	}
+	app.server.AddPrompt(&mcp.Prompt{Name: "test_prompt"}, func(context.Context, *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return &mcp.GetPromptResult{Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: "test"}}}}, nil
+	})
 
 	ts := httptest.NewServer(app.handler())
 	t.Cleanup(ts.Close)
@@ -474,7 +473,7 @@ func setupTestServerWithEmitter(t *testing.T, cfg *config.Config, emitter analyt
 	t.Helper()
 
 	o := &opts{emitter: emitter}
-	WithGetStartedSkillURL("")(o)
+	WithSkillsRepo("", "")(o)
 
 	app, err := New(cfg, o)
 	if err != nil {
@@ -487,9 +486,6 @@ func setupTestServerWithEmitter(t *testing.T, cfg *config.Config, emitter analyt
 	}
 	if err := app.registerResources(ctx); err != nil {
 		t.Fatalf("failed to register resources: %v", err)
-	}
-	if err := app.registerPrompts(ctx); err != nil {
-		t.Fatalf("failed to register prompts: %v", err)
 	}
 
 	ts := httptest.NewServer(app.handler())
@@ -508,7 +504,7 @@ func setupTestServerWithInspectorAndEmitter(
 	t.Helper()
 
 	o := &opts{inspector: inspector, emitter: emitter}
-	WithGetStartedSkillURL("")(o)
+	WithSkillsRepo("", "")(o)
 
 	app, err := New(cfg, o)
 	if err != nil {
@@ -521,9 +517,6 @@ func setupTestServerWithInspectorAndEmitter(
 	}
 	if err := app.registerResources(ctx); err != nil {
 		t.Fatalf("failed to register resources: %v", err)
-	}
-	if err := app.registerPrompts(ctx); err != nil {
-		t.Fatalf("failed to register prompts: %v", err)
 	}
 
 	ts := httptest.NewServer(app.handler())

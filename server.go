@@ -41,18 +41,17 @@ type App struct {
 	version      string
 	appName      string
 	tools        []registeredTool
-	getStarted   *remoteSkill
+	skills       *skillsRepo
 }
 
 type opts struct {
-	l         *slog.Logger
-	emitter   analytics.Emitter
-	inspector requestinspect.Inspector
-	version   string
-	appName   string
-	// A pointer so an explicitly empty string (disabled) stays distinguishable
-	// from an unset field (use the default).
-	getStartedSkillURL *string
+	l             *slog.Logger
+	emitter       analytics.Emitter
+	inspector     requestinspect.Inspector
+	version       string
+	appName       string
+	skillsTreeURL *string
+	skillsRawURL  string
 }
 
 func (o opts) logger() *slog.Logger {
@@ -69,11 +68,11 @@ func (o opts) analyticsEmitter() analytics.Emitter {
 	return analytics.Noop()
 }
 
-func (o opts) getStartedURL() string {
-	if o.getStartedSkillURL != nil {
-		return *o.getStartedSkillURL
+func (o opts) skillsSource() (string, string) {
+	if o.skillsTreeURL != nil {
+		return *o.skillsTreeURL, o.skillsRawURL
 	}
-	return defaultGetStartedURL
+	return defaultSkillsTreeURL, defaultSkillsRawURL
 }
 
 type OptFunc func(o *opts)
@@ -117,13 +116,15 @@ func WithAppName(appName string) OptFunc {
 	}
 }
 
-// WithGetStartedSkillURL overrides where the onboarding prompt fetches the
-// maintained Get Started skill from. Pass an empty string to disable fetching,
-// which suits a deployment with no egress: the prompt then tells the client to
-// fetch the skill itself. Defaults to the public skills repo on GitHub.
-func WithGetStartedSkillURL(u string) OptFunc {
+// WithSkillsRepo overrides where the skills tools read the Fingerprint skills
+// from: treeURL returns a GitHub git tree listing and rawURL serves file
+// contents by repo path. Pass empty strings to disable the skills tools, which
+// suits a deployment with no egress. Defaults to the public skills repo on
+// GitHub.
+func WithSkillsRepo(treeURL, rawURL string) OptFunc {
 	return func(o *opts) {
-		o.getStartedSkillURL = &u
+		o.skillsTreeURL = &treeURL
+		o.skillsRawURL = rawURL
 	}
 }
 
@@ -174,10 +175,6 @@ func Run(ctx context.Context, config *config.Config, options ...OptFunc) error {
 		return fmt.Errorf("registering resources: %w", err)
 	}
 
-	if err := app.registerPrompts(ctx); err != nil {
-		return fmt.Errorf("registering prompts: %w", err)
-	}
-
 	return app.run(ctx)
 }
 
@@ -209,11 +206,7 @@ func New(cfg *config.Config, opts *opts) (*App, error) {
 		opts:    opts,
 		version: v,
 		appName: appName,
-		getStarted: &remoteSkill{
-			url:   opts.getStartedURL(),
-			ttl:   getStartedTTL,
-			strip: true,
-		},
+		skills:  newSkillsRepo(opts.skillsSource()),
 	}
 	a.server.AddReceivingMiddleware(a.loggingMiddleware)
 
@@ -836,6 +829,9 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 // readOnlyTools is the set of tools registered when --readonly is used.
 var readOnlyTools = []string{
 	"get_current_time",
+	"list_skills",
+	"get_skill",
+	"get_skill_file",
 	"get_event",
 	"search_events",
 	"list_environments",
@@ -870,6 +866,14 @@ func (a *App) registerTools(ctx context.Context) error {
 	candidates = append(candidates,
 		toolEntry{"get_current_time", func() error { return a.registerGetCurrentTimeTool(ctx) }},
 	)
+
+	if a.skills != nil {
+		candidates = append(candidates,
+			toolEntry{"list_skills", func() error { return a.registerListSkillsTool(ctx) }},
+			toolEntry{"get_skill", func() error { return a.registerGetSkillTool(ctx) }},
+			toolEntry{"get_skill_file", func() error { return a.registerGetSkillFileTool(ctx) }},
+		)
+	}
 
 	if a.cfg.PublicMode || (!a.cfg.PublicMode && a.cfg.ServerAPIKey != "") {
 		candidates = append(candidates,

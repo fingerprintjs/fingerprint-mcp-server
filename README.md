@@ -15,7 +15,7 @@
 - Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
 - **Event tools**: Retrieve and search identification and Automation Intelligence (edge) events with full smart signal data
 - **Management tools**: Manage workspace environments and API keys
-- **Onboarding prompt**: Points agents at the [Fingerprint skills repo](https://github.com/fingerprintjs/skills) for the full Get Started flow
+- **Skills tools**: Serve the [Fingerprint skills](https://github.com/fingerprintjs/skills) (integration guides, proxy setup, Smart Signals) to clients that cannot fetch them themselves
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
 - OAuth2 login supported
@@ -245,11 +245,14 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. `get_current_time` needs no key and is always available. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key and are always available. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
 | `get_current_time`   | Return the current date/time in UTC (and an optional IANA timezone) |
+| `list_skills`        | List the Fingerprint skills by id and description                   |
+| `get_skill`          | Return one skill's instructions and the files it refers to          |
+| `get_skill_file`     | Return one file from a skill, such as a code snippet                |
 | `get_event`          | Retrieve a specific event by ID (identification or edge)            |
 | `search_events`      | Search events with filters (visitor, IP, smart signals, time range) |
 | `list_environments`  | List workspace environments with pagination                         |
@@ -269,9 +272,9 @@ Event tools require a Server API key. Management tools require a Management API 
 - **`fingerprint://schemas/environment`** — JSON Schema for environment objects.
 - **`fingerprint://schemas/api-key`** — JSON Schema for API key objects.
 
-## Available Prompts
+## Skills
 
-- **`onboarding`** — Serves the Get Started flow from the [Fingerprint skills repo](https://github.com/fingerprintjs/skills), where the per-stack integration skills are maintained. The server fetches the skill (cached for an hour) and inlines it, so clients without a fetch tool of their own still get the guidance; if the skills repo is unreachable, the prompt tells the client where to fetch it instead. Pass `WithGetStartedSkillURL("")` to disable the fetch.
+The skills tools read the [Fingerprint skills repo](https://github.com/fingerprintjs/skills) from GitHub and cache each file for an hour. Pass `WithSkillsRepo("", "")` to disable them on a deployment with no egress.
 
 ## License
 
