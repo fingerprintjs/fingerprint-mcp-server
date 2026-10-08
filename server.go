@@ -116,11 +116,6 @@ func WithAppName(appName string) OptFunc {
 	}
 }
 
-// WithSkillsRepo overrides where the skills tools read the Fingerprint skills
-// from: treeURL returns a GitHub git tree listing and rawURL serves file
-// contents by repo path. Pass empty strings to disable the skills tools, which
-// suits a deployment with no egress. Defaults to the public skills repo on
-// GitHub.
 func WithSkillsRepo(treeURL, rawURL string) OptFunc {
 	return func(o *opts) {
 		o.skillsTreeURL = &treeURL

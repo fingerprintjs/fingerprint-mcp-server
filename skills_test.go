@@ -307,7 +307,6 @@ func TestRemoteSkill_ServesStaleWhenRefetchFails(t *testing.T) {
 	status.Store(http.StatusOK)
 	ts, hits := skillServer(t, testRemoteSkill, &status)
 
-	// A zero TTL forces the second get onto the refresh path.
 	r := &remoteSkill{url: ts.URL, ttl: 0}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
