@@ -245,7 +245,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key and are always available. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. With `--tools`, allow-list `list_skills`, `get_skill`, `get_skill_file` and `call_tool` for the skills to work. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
