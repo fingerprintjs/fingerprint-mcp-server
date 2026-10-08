@@ -50,8 +50,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 15 {
-		t.Errorf("expected 15 tools, got %d: %v", len(names), names)
+	if len(names) != 16 {
+		t.Errorf("expected 16 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestListTools_PrivateMode_ServerKeyOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_current_time", "get_event", "search_events", "list_tools", "call_tool"}
+	expected := []string{"get_current_time", "list_skills", "get_event", "search_events", "list_tools", "call_tool"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -135,7 +135,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 
 	names := toolNames(result)
 	expected := []string{
-		"get_current_time",
+		"get_current_time", "list_skills",
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
 		"list_tools", "call_tool", "call_write_tool",
@@ -173,7 +173,7 @@ func TestListTools_PrivateMode_ReadOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_tools", "call_tool"}
+	expected := []string{"get_current_time", "list_skills", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_tools", "call_tool"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -269,8 +269,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 15 {
-		t.Errorf("expected 15 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 16 {
+		t.Errorf("expected 16 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -286,8 +286,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 15 {
-		t.Errorf("expected 15 tools, got %d: %v", len(names), names)
+	if len(names) != 16 {
+		t.Errorf("expected 16 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -313,8 +313,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 15 {
-		t.Errorf("expected 15 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 16 {
+		t.Errorf("expected 16 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -1451,16 +1451,7 @@ func TestLoggingMiddleware_ResourceAndPromptFields(t *testing.T) {
 		t.Fatalf("ReadResource(%s) failed: %v", resourceURI, err)
 	}
 
-	// Discover an embedded prompt name at runtime so the test isn't coupled to
-	// a specific SKILL filename. registerPrompts walks skills/**/SKILL.md.
-	promptsList, err := session.ListPrompts(context.Background(), &mcp.ListPromptsParams{})
-	if err != nil {
-		t.Fatalf("ListPrompts failed: %v", err)
-	}
-	if len(promptsList.Prompts) == 0 {
-		t.Fatal("expected at least one embedded prompt; check skills/ directory")
-	}
-	promptName := promptsList.Prompts[0].Name
+	const promptName = "test_prompt"
 	if _, err := session.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: promptName}); err != nil {
 		t.Fatalf("GetPrompt(%s) failed: %v", promptName, err)
 	}
@@ -2337,7 +2328,7 @@ func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 		listed[tool.Name] = tool
 	}
 
-	wantRead := []string{"get_current_time", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
+	wantRead := []string{"get_current_time", "list_skills", "get_skill", "get_skill_file", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key"}
 	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key"}
 	// Deletes are listed but never proxied, and the proxies list themselves so a
 	// conversation whose catalog predates one can still discover it exists.

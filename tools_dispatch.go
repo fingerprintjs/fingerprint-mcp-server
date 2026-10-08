@@ -86,6 +86,15 @@ func addTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	})
 }
 
+func addHiddenTool[In, Out any](a *App, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	a.tools = append(a.tools, registeredTool{
+		name:        t.Name,
+		description: t.Description,
+		inputSchema: inputSchemaFor[In](t),
+		call:        dispatchFunc(t.Name, h),
+	})
+}
+
 // addDirectTool registers a tool that is listed but never proxied. Deletes live
 // here: one "always allow" on call_write_tool would otherwise cover every write
 // tool behind it, and an irreversible one should still cost a decision.

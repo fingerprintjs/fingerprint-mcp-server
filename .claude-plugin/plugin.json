@@ -12,6 +12,5 @@
   "icon": "./icon.svg",
   "privacyPolicyUrl": "https://docs.fingerprint.com/docs/privacy-policy",
   "keywords": ["fingerprint"],
-  "skills": "./skills/",
   "mcpServers": "./.mcp.json"
 }
