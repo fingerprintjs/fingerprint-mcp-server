@@ -50,8 +50,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 20 {
-		t.Errorf("expected 20 tools, got %d: %v", len(names), names)
+	if len(names) != 21 {
+		t.Errorf("expected 21 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 		"get_current_time", "list_skills",
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
-		"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain",
+		"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain", "connect_subdomain",
 		"list_tools", "call_tool", "call_write_tool",
 	}
 	if len(names) != len(expected) {
@@ -270,8 +270,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 20 {
-		t.Errorf("expected 20 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 21 {
+		t.Errorf("expected 21 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -287,8 +287,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 20 {
-		t.Errorf("expected 20 tools, got %d: %v", len(names), names)
+	if len(names) != 21 {
+		t.Errorf("expected 21 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -314,8 +314,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 20 {
-		t.Errorf("expected 20 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 21 {
+		t.Errorf("expected 21 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -2330,7 +2330,7 @@ func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 	}
 
 	wantRead := []string{"get_current_time", "list_skills", "get_skill", "get_skill_file", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_subdomains", "get_subdomain"}
-	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key", "create_subdomain", "verify_subdomain"}
+	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key", "create_subdomain", "verify_subdomain", "connect_subdomain"}
 	// Deletes are listed but never proxied, and the proxies list themselves so a
 	// conversation whose catalog predates one can still discover it exists.
 	wantDirect := []string{"delete_environment", "delete_api_key", "list_tools", "call_tool", "call_write_tool"}

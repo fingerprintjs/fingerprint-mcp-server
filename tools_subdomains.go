@@ -37,6 +37,12 @@ type CreateSubdomainInput struct {
 
 type VerifySubdomainInput = SubdomainRef
 
+type ConnectSubdomainInput = SubdomainRef
+
+type ConnectSubdomainOutput struct {
+	Link mgmtapi.DomainConnectLink `json:"link" jsonschema:"Open domain_connect_url in the user's browser; after approving at the provider they land on the Fingerprint dashboard. Then verify_subdomain once"`
+}
+
 type SubdomainOutput struct {
 	Subdomain mgmtapi.Subdomain `json:"subdomain" jsonschema:"Current status and all DNS records. Configure the app only when status is active"`
 }
@@ -233,6 +239,37 @@ func (a *App) registerVerifySubdomainTool(_ context.Context) error {
 			return result, nil, err
 		}
 		return nil, &SubdomainOutput{Subdomain: *subdomain}, nil
+	})
+	return nil
+}
+
+func (a *App) registerConnectSubdomainTool(_ context.Context) error {
+	addWriteTool(a, &mcp.Tool{
+		Name:        "connect_subdomain",
+		Description: "Returns a Domain Connect link that adds the DNS records at the user's DNS provider with one approval, for a pending subdomain by id or hostname. Ask the user to open it in their browser; after approving they land on the Fingerprint dashboard, which confirms the result. Then verify_subdomain once and get_subdomain for status. Returns a 409 error when the provider has no Domain Connect or the subdomain is no longer pending: show the DNS records instead.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Connect Subdomain (Domain Connect)",
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ConnectSubdomainInput) (*mcp.CallToolResult, *ConnectSubdomainOutput, error) {
+		client, err := a.requireMgmtClient(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		id, err := resolveSubdomainID(ctx, client, input)
+		if err != nil {
+			result, err := subdomainToolError(err)
+			return result, nil, err
+		}
+		link, err := client.CreateDomainConnectURL(ctx, id)
+		if err != nil {
+			result, err := subdomainToolError(err)
+			return result, nil, err
+		}
+		return nil, &ConnectSubdomainOutput{Link: *link}, nil
 	})
 	return nil
 }

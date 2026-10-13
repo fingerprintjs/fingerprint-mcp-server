@@ -4,7 +4,7 @@ Tools and resources for the Fingerprint device intelligence platform (https://fi
 
 - **Events**: `get_event`, `search_events` cover two kinds of event. Identification events (JS Agent or mobile SDK) return `visitor_id`, browser and device details, and the full smart signal set. Automation Intelligence (edge) events return only request and IP derived fields (`ip_info`, `proxy`, `vpn`, `bot_info`, `url`, `tags`, `timestamp`) and have no `visitor_id`.
 - **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
-- **Subdomains**: `list_subdomains`, `get_subdomain`, `create_subdomain`, `verify_subdomain`. Follow `fingerprint-proxy-integration` for DNS setup and configure the app only when status is `active`. Deletion and Domain Connect are not exposed.
+- **Subdomains**: `list_subdomains`, `get_subdomain`, `create_subdomain`, `verify_subdomain`, `connect_subdomain` (Domain Connect link for one-approval DNS setup). Follow `fingerprint-proxy-integration` for DNS setup and configure the app only when status is `active`. Deletion is not exposed.
 - **Skills**: `list_skills` lists the maintained Fingerprint skills: integration guides per frontend framework and backend language, first-party deployment through a custom subdomain or proxy, Smart Signals, the Rules Engine. Load one with `get_skill` and the snippets it refers to with `get_skill_file`, both through `call_tool`.
 - **Schemas**: event, environment, and API key schemas are exposed as resources.
 - **Discovery**: `list_tools` reports the tools this server is serving right now. `call_tool` runs the read-only ones, `call_write_tool` the ones that change state.

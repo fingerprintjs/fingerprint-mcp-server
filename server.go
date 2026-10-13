@@ -894,6 +894,7 @@ func (a *App) registerTools(ctx context.Context) error {
 			toolEntry{"get_subdomain", func() error { return a.registerGetSubdomainTool(ctx) }},
 			toolEntry{"create_subdomain", func() error { return a.registerCreateSubdomainTool(ctx) }},
 			toolEntry{"verify_subdomain", func() error { return a.registerVerifySubdomainTool(ctx) }},
+			toolEntry{"connect_subdomain", func() error { return a.registerConnectSubdomainTool(ctx) }},
 		)
 	}
 
