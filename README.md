@@ -248,7 +248,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. With `--tools`, allow-list `list_skills`, `get_skill`, `get_skill_file` and `call_tool` for the skills to work. Write tools (create/update/delete/verify) are hidden when `--readonly` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. With `--tools`, allow-list `list_skills`, `get_skill`, `get_skill_file` and `call_tool` for the skills to work. Write tools (create/update/delete/verify/connect) are hidden when `--readonly` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
@@ -271,11 +271,14 @@ Event tools require a Server API key. Management tools require a Management API 
 | `get_subdomain`      | Get a subdomain's status and DNS records                            |
 | `create_subdomain`   | Register a hostname and return the required DNS records             |
 | `verify_subdomain`   | Request one DNS check, then return the freshly read status          |
+| `connect_subdomain`  | Get a Domain Connect link that adds the DNS records at the provider |
 
 For custom subdomains, follow `fingerprint-proxy-integration` through the skills tools. Creation
-does not add DNS records: the user or an authorized DNS-provider tool must add them. Configure
-the app only when the subdomain is `active`. Use `get_subdomain` for status checks after verifying;
-respect `retry_after` on rate-limit errors. Subdomain deletion and Domain Connect are not exposed.
+does not add DNS records: when the provider supports Domain Connect, `connect_subdomain` returns a
+link the user opens to add them with one approval (they land on the Fingerprint dashboard
+afterwards); otherwise the user or an authorized DNS-provider tool adds them. Configure the app
+only when the subdomain is `active`. Use `get_subdomain` for status checks after verifying;
+respect `retry_after` on rate-limit errors. Subdomain deletion is not exposed.
 
 ## Available Resources
 

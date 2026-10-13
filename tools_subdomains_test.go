@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -127,7 +128,7 @@ func TestSubdomainToolsAccessPolicy(t *testing.T) {
 		{"no management key", config.Config{}, nil},
 		{"readonly", config.Config{ManagementAPIKey: "key", ReadOnly: true}, []string{"list_subdomains", "get_subdomain"}},
 		{"allowlist", config.Config{ManagementAPIKey: "key", Tools: []string{"get_subdomain", "create_environment", "call_tool", "call_write_tool"}}, []string{"get_subdomain"}},
-		{"all", config.Config{ManagementAPIKey: "key"}, []string{"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain"}},
+		{"all", config.Config{ManagementAPIKey: "key"}, []string{"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain", "connect_subdomain"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
@@ -140,7 +141,7 @@ func TestSubdomainToolsAccessPolicy(t *testing.T) {
 				t.Fatal(err)
 			}
 			names := toolNames(listed)
-			for _, name := range []string{"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain", "delete_subdomain"} {
+			for _, name := range []string{"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain", "connect_subdomain", "delete_subdomain"} {
 				if slices.Contains(names, name) != slices.Contains(tc.want, name) {
 					t.Errorf("unexpected availability for %s: %v", name, names)
 				}
@@ -153,7 +154,7 @@ func TestSubdomainToolsAccessPolicy(t *testing.T) {
 					}
 				}
 			}
-			for _, name := range []string{"create_subdomain", "verify_subdomain"} {
+			for _, name := range []string{"create_subdomain", "verify_subdomain", "connect_subdomain"} {
 				result := mustCallTool(t, session, "call_tool", map[string]any{"tool_name": name, "arguments": map[string]any{"id": "certv2_test", "hostname": "metrics.example.com"}})
 				if !result.IsError {
 					t.Errorf("call_tool allowed %s", name)
@@ -204,6 +205,9 @@ func TestSubdomainToolsErrors(t *testing.T) {
 			}
 			if tc.status == 503 && strings.Contains(output.Error.Message, "Try again later") {
 				t.Error("unavailable feature must not instruct blind retries")
+			}
+			if tc.status == 429 && strings.Contains(output.Error.Message, "verification") {
+				t.Error("a create 429 must not carry the verification wait hint")
 			}
 			if tc.status == 401 && !strings.Contains(output.Error.Message, "Management API key") {
 				t.Error("missing authentication recovery guidance")
@@ -294,5 +298,58 @@ func TestVerifySubdomainRateLimitWithoutRetryAfter(t *testing.T) {
 	}
 	if output.Error.RetryAfter != "60" || !strings.Contains(output.Error.Message, "Wait before the next verification") {
 		t.Fatalf("agent gets no wait time: %+v", output.Error)
+	}
+}
+
+func TestConnectSubdomainReturnsTheDashboardLink(t *testing.T) {
+	var bodies []string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/subdomains":
+			fmt.Fprint(w, `{"data":[{"id":"certv2_test","subdomain":"metrics.example.com","status":"pending","created_at":"2026-10-09T12:00:00Z","updated_at":"2026-10-09T12:00:00Z"}],"metadata":{"pagination":{"next_cursor":null,"prev_cursor":null}}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/domain-connect"):
+			raw, _ := io.ReadAll(r.Body)
+			bodies = append(bodies, string(raw))
+			if r.URL.Path != "/subdomains/certv2_test/domain-connect" {
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprint(w, `{"error":{"code":"not_found","message":"Subdomain not found"}}`)
+				return
+			}
+			fmt.Fprint(w, `{"data":{"domain_connect_url":"https://dash.cloudflare.com/domainconnect/apply?domain=example.com&redirect_uri=https%3A%2F%2Fdashboard.fingerprint.com%2Fsubdomains%2Fcertv2_test%3Fdomain_connect%3Dtrue&sig=x","dns_provider":"Cloudflare"}}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer api.Close()
+	session := setupStdioServer(t, &config.Config{ManagementAPIKey: "key", ManagementAPIURL: api.URL})
+
+	result := mustCallTool(t, session, "call_write_tool", map[string]any{"tool_name": "connect_subdomain", "arguments": map[string]any{"hostname": "metrics.example.com"}})
+	if result.IsError {
+		t.Fatal(extractTextContent(t, result))
+	}
+	var output ConnectSubdomainOutput
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(output.Link.DomainConnectURL, "https://dash.cloudflare.com/") || output.Link.DNSProvider != "Cloudflare" {
+		t.Fatalf("unexpected link: %+v", output.Link)
+	}
+	// No port: the provider must redirect to the dashboard, not to a loopback this server cannot run.
+	if len(bodies) != 1 || strings.Contains(bodies[0], "port") {
+		t.Fatalf("unexpected request body: %v", bodies)
+	}
+}
+
+func TestConnectSubdomainUnavailableIsAConflict(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		fmt.Fprint(w, `{"error":{"code":"conflict","message":"Domain Connect is not available for this subdomain"}}`)
+	}))
+	defer api.Close()
+	session := setupStdioServer(t, &config.Config{ManagementAPIKey: "key", ManagementAPIURL: api.URL})
+	result := mustCallTool(t, session, "connect_subdomain", map[string]any{"id": "certv2_test"})
+	if !result.IsError || !strings.Contains(extractTextContent(t, result), `"status":409`) {
+		t.Fatalf("expected a structured 409: %s", extractTextContent(t, result))
 	}
 }

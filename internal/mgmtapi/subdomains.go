@@ -96,3 +96,26 @@ func (c *Client) VerifySubdomain(ctx context.Context, id string) (*Subdomain, er
 	}
 	return &resp.Data, nil
 }
+
+type DomainConnectLink struct {
+	DomainConnectURL string `json:"domain_connect_url" jsonschema:"Signed link to the DNS provider; it redirects to the subdomain page in the Fingerprint dashboard once the records are added"`
+	DNSProvider      string `json:"dns_provider,omitempty" jsonschema:"DNS provider display name when known, e.g. Cloudflare"`
+}
+
+type domainConnectResponse struct {
+	Data DomainConnectLink `json:"data"`
+}
+
+// CreateDomainConnectURL asks for a Domain Connect link without a local callback port, so the
+// provider redirects to the dashboard instead of a loopback listener this server cannot run.
+func (c *Client) CreateDomainConnectURL(ctx context.Context, id string) (*DomainConnectLink, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "/subdomains/"+url.PathEscape(id)+"/domain-connect", nil, struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	var resp domainConnectResponse
+	if err := c.do(req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}

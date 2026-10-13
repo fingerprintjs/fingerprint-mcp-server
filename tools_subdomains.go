@@ -37,6 +37,12 @@ type CreateSubdomainInput struct {
 
 type VerifySubdomainInput = SubdomainRef
 
+type ConnectSubdomainInput = SubdomainRef
+
+type ConnectSubdomainOutput struct {
+	Link mgmtapi.DomainConnectLink `json:"link" jsonschema:"Open domain_connect_url in the user's browser; after approving at the provider they land on the Fingerprint dashboard. Then verify_subdomain once"`
+}
+
 type SubdomainOutput struct {
 	Subdomain mgmtapi.Subdomain `json:"subdomain" jsonschema:"Current status and all DNS records. Configure the app only when status is active"`
 }
@@ -89,6 +95,22 @@ func normalizeHostname(hostname string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname), "."))
 }
 
+// verifyToolError adds what only verification knows: the API does not send Retry-After yet, and
+// verification allows about one check per minute per subdomain, so a 429 gets that wait instead
+// of nothing. Other subdomain calls keep the API's own 429 as is.
+func verifyToolError(err error) (*mcp.CallToolResult, error) {
+	var apiErr *mgmtapi.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
+		limited := *apiErr
+		if limited.RetryAfter == "" {
+			limited.RetryAfter = "60"
+		}
+		limited.Message += ". Wait before the next verification; use get_subdomain for the current status."
+		err = &limited
+	}
+	return subdomainToolError(err)
+}
+
 func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	var apiErr *mgmtapi.APIError
 	if !errors.As(err, &apiErr) {
@@ -98,13 +120,6 @@ func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	switch details.StatusCode {
 	case http.StatusUnauthorized:
 		details.Message += ". Check the Management API key, or reconnect the Fingerprint connector."
-	case http.StatusTooManyRequests:
-		// The API does not send Retry-After yet; verification allows about one check per minute
-		// per subdomain, so give the agent that wait instead of nothing.
-		if details.RetryAfter == "" {
-			details.RetryAfter = "60"
-		}
-		details.Message += ". Wait before the next verification; use get_subdomain for the current status."
 	case http.StatusServiceUnavailable:
 		details.Message = "Custom subdomain service is unavailable. It may be temporarily unavailable or disabled for this workspace; check with Fingerprint support before retrying."
 	}
@@ -229,10 +244,41 @@ func (a *App) registerVerifySubdomainTool(_ context.Context) error {
 		}
 		subdomain, err := client.VerifySubdomain(ctx, id)
 		if err != nil {
-			result, err := subdomainToolError(err)
+			result, err := verifyToolError(err)
 			return result, nil, err
 		}
 		return nil, &SubdomainOutput{Subdomain: *subdomain}, nil
+	})
+	return nil
+}
+
+func (a *App) registerConnectSubdomainTool(_ context.Context) error {
+	addWriteTool(a, &mcp.Tool{
+		Name:        "connect_subdomain",
+		Description: "Returns a Domain Connect link that adds the DNS records at the user's DNS provider with one approval, for a pending subdomain by id or hostname. Ask the user to open it in their browser; after approving they land on the Fingerprint dashboard, which confirms the result. Then verify_subdomain once and get_subdomain for status. Returns a 409 error when the provider has no Domain Connect or the subdomain is no longer pending: show the DNS records instead.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: utils.Ptr(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   utils.Ptr(false),
+			ReadOnlyHint:    false,
+			Title:           "Connect Subdomain (Domain Connect)",
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ConnectSubdomainInput) (*mcp.CallToolResult, *ConnectSubdomainOutput, error) {
+		client, err := a.requireMgmtClient(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		id, err := resolveSubdomainID(ctx, client, input)
+		if err != nil {
+			result, err := subdomainToolError(err)
+			return result, nil, err
+		}
+		link, err := client.CreateDomainConnectURL(ctx, id)
+		if err != nil {
+			result, err := subdomainToolError(err)
+			return result, nil, err
+		}
+		return nil, &ConnectSubdomainOutput{Link: *link}, nil
 	})
 	return nil
 }
