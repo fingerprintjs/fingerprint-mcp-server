@@ -95,6 +95,22 @@ func normalizeHostname(hostname string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname), "."))
 }
 
+// verifyToolError adds what only verification knows: the API does not send Retry-After yet, and
+// verification allows about one check per minute per subdomain, so a 429 gets that wait instead
+// of nothing. Other subdomain calls keep the API's own 429 as is.
+func verifyToolError(err error) (*mcp.CallToolResult, error) {
+	var apiErr *mgmtapi.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
+		limited := *apiErr
+		if limited.RetryAfter == "" {
+			limited.RetryAfter = "60"
+		}
+		limited.Message += ". Wait before the next verification; use get_subdomain for the current status."
+		err = &limited
+	}
+	return subdomainToolError(err)
+}
+
 func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	var apiErr *mgmtapi.APIError
 	if !errors.As(err, &apiErr) {
@@ -104,13 +120,6 @@ func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	switch details.StatusCode {
 	case http.StatusUnauthorized:
 		details.Message += ". Check the Management API key, or reconnect the Fingerprint connector."
-	case http.StatusTooManyRequests:
-		// The API does not send Retry-After yet; verification allows about one check per minute
-		// per subdomain, so give the agent that wait instead of nothing.
-		if details.RetryAfter == "" {
-			details.RetryAfter = "60"
-		}
-		details.Message += ". Wait before the next verification; use get_subdomain for the current status."
 	case http.StatusServiceUnavailable:
 		details.Message = "Custom subdomain service is unavailable. It may be temporarily unavailable or disabled for this workspace; check with Fingerprint support before retrying."
 	}
@@ -235,7 +244,7 @@ func (a *App) registerVerifySubdomainTool(_ context.Context) error {
 		}
 		subdomain, err := client.VerifySubdomain(ctx, id)
 		if err != nil {
-			result, err := subdomainToolError(err)
+			result, err := verifyToolError(err)
 			return result, nil, err
 		}
 		return nil, &SubdomainOutput{Subdomain: *subdomain}, nil

@@ -206,6 +206,9 @@ func TestSubdomainToolsErrors(t *testing.T) {
 			if tc.status == 503 && strings.Contains(output.Error.Message, "Try again later") {
 				t.Error("unavailable feature must not instruct blind retries")
 			}
+			if tc.status == 429 && strings.Contains(output.Error.Message, "verification") {
+				t.Error("a create 429 must not carry the verification wait hint")
+			}
 			if tc.status == 401 && !strings.Contains(output.Error.Message, "Management API key") {
 				t.Error("missing authentication recovery guidance")
 			}
