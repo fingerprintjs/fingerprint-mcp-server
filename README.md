@@ -84,7 +84,10 @@ repo, not here.
 If you build your own emitter, the event shape is in
 `analytics/analytics.go`. The middleware fires one `mcp_method_called`
 event per MCP method, gated on a non-empty `subscription_id` (so pre-auth
-methods and the private-mode auth path stay silent regardless).
+methods and the private-mode auth path stay silent regardless). Calls that
+go through `call_tool` or `call_write_tool` report the proxy as `tool_name`
+and the tool it was asked to run as `target_tool`, also when the proxy
+rejects the call (then `is_error` is true).
 
 ## Request inspection
 

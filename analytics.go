@@ -91,6 +91,14 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 	if argumentsJSON != "" {
 		props["arguments"] = argumentsJSON
 	}
+	// Calls through call_tool / call_write_tool report the proxy as tool_name;
+	// the tool they asked for is inside the arguments. Surface it so usage can
+	// be counted per tool without parsing arguments downstream. It is what was
+	// asked, not what ran: a rejected call (unknown name, write through
+	// call_tool) still reports it, with is_error true.
+	if target := proxiedToolName(in.toolName, argumentsJSON); target != "" {
+		props["target_tool"] = target
+	}
 	if in.errorMessage != "" {
 		props["error_message"] = in.errorMessage
 	}
@@ -127,4 +135,19 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 		SubscriptionID: in.subID,
 		Properties:     props,
 	})
+}
+
+// proxiedToolName returns the tool a proxy call targets, or "" when the call
+// is not a proxy call or its arguments do not name one.
+func proxiedToolName(toolName, argumentsJSON string) string {
+	if (toolName != "call_tool" && toolName != "call_write_tool") || argumentsJSON == "" {
+		return ""
+	}
+	var args struct {
+		ToolName string `json:"tool_name"`
+	}
+	if err := json.Unmarshal([]byte(argumentsJSON), &args); err != nil {
+		return ""
+	}
+	return args.ToolName
 }
