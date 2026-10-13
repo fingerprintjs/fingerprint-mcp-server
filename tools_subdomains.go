@@ -195,7 +195,7 @@ func (a *App) registerGetSubdomainTool(_ context.Context) error {
 func (a *App) registerCreateSubdomainTool(_ context.Context) error {
 	addWriteTool(a, &mcp.Tool{
 		Name:        "create_subdomain",
-		Description: "Registers the user-approved hostname and returns all required DNS records. Check list_subdomains first to reuse an existing resource. Add records manually or with an authorized DNS-provider tool (DNS only on Cloudflare). Do not configure the app until status is active.",
+		Description: "Registers the user-approved hostname and returns all required DNS records. Check list_subdomains first to reuse an existing resource. To add the records, try connect_subdomain first (one approval at the DNS provider); if it is unavailable, show the records for the user or an authorized DNS-provider tool to add (DNS only on Cloudflare). Do not configure the app until status is active.",
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
 			IdempotentHint:  false,
