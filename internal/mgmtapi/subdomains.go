@@ -89,8 +89,10 @@ func (c *Client) VerifySubdomain(ctx context.Context, id string) (*Subdomain, er
 	if err != nil {
 		return nil, err
 	}
-	if err := c.do(req, nil); err != nil {
+	// The check runs synchronously and the response already carries the updated subdomain.
+	var resp subdomainResponse
+	if err := c.do(req, &resp); err != nil {
 		return nil, err
 	}
-	return c.GetSubdomain(ctx, id)
+	return &resp.Data, nil
 }

@@ -41,7 +41,7 @@ func TestSubdomainToolsLifecycle(t *testing.T) {
 			fmt.Fprint(w, `{"data":[{"id":"certv2_test","subdomain":"metrics.example.com","status":"pending","created_at":"2026-10-09T12:00:00Z","updated_at":"2026-10-09T12:00:00Z"}],"metadata":{"pagination":{"next_cursor":"next-page","prev_cursor":null}}}`)
 		case strings.HasSuffix(r.URL.Path, "/verify"):
 			verified = true
-			fmt.Fprint(w, `{"data":{"status":"pending"}}`)
+			fallthrough
 		default:
 			body := cannedSubdomainResponse
 			if verified {
@@ -108,7 +108,7 @@ func TestSubdomainToolsLifecycle(t *testing.T) {
 		t.Fatal("could not resume the existing subdomain in a new session")
 	}
 	want := []string{
-		"GET /subdomains?cursor=previous&limit=2", "POST /subdomains", "GET /subdomains/certv2_test", "POST /subdomains/certv2_test/verify", "GET /subdomains/certv2_test",
+		"GET /subdomains?cursor=previous&limit=2", "POST /subdomains", "GET /subdomains/certv2_test", "POST /subdomains/certv2_test/verify",
 		"GET /subdomains", "GET /subdomains?cursor=next-page", "GET /subdomains/certv2_test",
 		"GET /subdomains/certv2_test",
 		"GET /subdomains/certv2_test",
@@ -272,5 +272,27 @@ func TestSubdomainToolsHostnameResolution(t *testing.T) {
 				t.Error("verified without a resolved id")
 			}
 		})
+	}
+}
+
+func TestVerifySubdomainRateLimitWithoutRetryAfter(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"message":"You are sending too many requests","code":"rate-limit.exceeded"}}`)
+	}))
+	defer api.Close()
+	session := setupStdioServer(t, &config.Config{ManagementAPIKey: "key", ManagementAPIURL: api.URL})
+	result := mustCallTool(t, session, "verify_subdomain", map[string]any{"id": "certv2_test"})
+	var output struct {
+		Error mgmtapi.APIError `json:"error"`
+	}
+	if !result.IsError {
+		t.Fatal("expected tool error")
+	}
+	if err := json.Unmarshal([]byte(extractTextContent(t, result)), &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Error.RetryAfter != "60" || !strings.Contains(output.Error.Message, "Wait before the next verification") {
+		t.Fatalf("agent gets no wait time: %+v", output.Error)
 	}
 }

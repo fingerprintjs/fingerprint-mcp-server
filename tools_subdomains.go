@@ -98,6 +98,13 @@ func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	switch details.StatusCode {
 	case http.StatusUnauthorized:
 		details.Message += ". Check the Management API key, or reconnect the Fingerprint connector."
+	case http.StatusTooManyRequests:
+		// The API does not send Retry-After yet; verification allows about one check per minute
+		// per subdomain, so give the agent that wait instead of nothing.
+		if details.RetryAfter == "" {
+			details.RetryAfter = "60"
+		}
+		details.Message += ". Wait before the next verification; use get_subdomain for the current status."
 	case http.StatusServiceUnavailable:
 		details.Message = "Custom subdomain service is unavailable. It may be temporarily unavailable or disabled for this workspace; check with Fingerprint support before retrying."
 	}

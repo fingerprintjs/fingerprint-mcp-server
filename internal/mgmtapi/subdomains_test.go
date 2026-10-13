@@ -34,8 +34,7 @@ func TestSubdomainOperations(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			fmt.Fprintf(w, `{"data":%s}`, testSubdomain)
 		case strings.HasSuffix(r.URL.Path, "/verify"):
-			// The POST representation can be stale; only the following GET is returned.
-			fmt.Fprint(w, `{"data":{"status":"failed"}}`)
+			fmt.Fprintf(w, `{"data":%s}`, testSubdomain)
 		default:
 			fmt.Fprintf(w, `{"data":%s}`, testSubdomain)
 		}
@@ -64,7 +63,7 @@ func TestSubdomainOperations(t *testing.T) {
 			t.Fatalf("incomplete subdomain: %+v", subdomain)
 		}
 	}
-	want := []string{"GET /subdomains?cursor=a%2Bb&limit=2", "POST /subdomains", "GET /subdomains/certv2_test", "POST /subdomains/certv2_test/verify", "GET /subdomains/certv2_test"}
+	want := []string{"GET /subdomains?cursor=a%2Bb&limit=2", "POST /subdomains", "GET /subdomains/certv2_test", "POST /subdomains/certv2_test/verify"}
 	if !reflect.DeepEqual(requests, want) {
 		t.Errorf("requests = %v, want %v", requests, want)
 	}
