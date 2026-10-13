@@ -86,7 +86,8 @@ If you build your own emitter, the event shape is in
 event per MCP method, gated on a non-empty `subscription_id` (so pre-auth
 methods and the private-mode auth path stay silent regardless). Calls that
 go through `call_tool` or `call_write_tool` report the proxy as `tool_name`
-and the tool that actually ran as `target_tool`.
+and the tool it was asked to run as `target_tool`, also when the proxy
+rejects the call (then `is_error` is true).
 
 ## Request inspection
 

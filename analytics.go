@@ -92,8 +92,10 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 		props["arguments"] = argumentsJSON
 	}
 	// Calls through call_tool / call_write_tool report the proxy as tool_name;
-	// the tool that actually ran is inside the arguments. Surface it so usage
-	// can be counted per tool without parsing arguments downstream.
+	// the tool they asked for is inside the arguments. Surface it so usage can
+	// be counted per tool without parsing arguments downstream. It is what was
+	// asked, not what ran: a rejected call (unknown name, write through
+	// call_tool) still reports it, with is_error true.
 	if target := proxiedToolName(in.toolName, argumentsJSON); target != "" {
 		props["target_tool"] = target
 	}
