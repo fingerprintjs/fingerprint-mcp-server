@@ -52,6 +52,8 @@ func resolveSubdomainID(ctx context.Context, client *mgmtapi.Client, ref Subdoma
 		return "", errors.New("id or hostname is required")
 	}
 	var matches []string
+	// Same guard as the CLI's list: a cursor that comes back twice would otherwise loop forever.
+	seen := map[string]bool{}
 	pagination := &mgmtapi.PaginationParams{}
 	for {
 		page, err := client.ListSubdomains(ctx, pagination)
@@ -67,6 +69,10 @@ func resolveSubdomainID(ctx context.Context, client *mgmtapi.Client, ref Subdoma
 		if next == nil || *next == "" {
 			break
 		}
+		if seen[*next] {
+			return "", errors.New("the Management API returned a repeated subdomain pagination cursor")
+		}
+		seen[*next] = true
 		pagination = &mgmtapi.PaginationParams{Cursor: *next}
 	}
 	switch len(matches) {

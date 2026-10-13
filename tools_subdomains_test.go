@@ -246,6 +246,7 @@ func TestSubdomainToolsHostnameResolution(t *testing.T) {
 	}{
 		{"neither id nor hostname", `[]`, map[string]any{}, "id or hostname is required"},
 		{"unknown hostname", `[]`, map[string]any{"hostname": "metrics.example.com"}, "no custom subdomain named metrics.example.com"},
+		{"repeated cursor", `[]`, map[string]any{"hostname": "metrics.example.com"}, "repeated subdomain pagination cursor"},
 		{"ambiguous hostname", `[{"id":"certv2_a","subdomain":"metrics.example.com","status":"pending","created_at":"2026-10-09T12:00:00Z","updated_at":"2026-10-09T12:00:00Z"},{"id":"certv2_b","subdomain":"metrics.example.com","status":"active","created_at":"2026-10-09T12:00:00Z","updated_at":"2026-10-09T12:00:00Z"}]`, map[string]any{"hostname": "metrics.example.com"}, "certv2_a, certv2_b"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -255,7 +256,11 @@ func TestSubdomainToolsHostnameResolution(t *testing.T) {
 					verified = true
 				}
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprintf(w, `{"data":%s,"metadata":{"pagination":{"next_cursor":null,"prev_cursor":null}}}`, tc.list)
+				cursor := "null"
+				if tc.name == "repeated cursor" {
+					cursor = `"again"`
+				}
+				fmt.Fprintf(w, `{"data":%s,"metadata":{"pagination":{"next_cursor":%s,"prev_cursor":null}}}`, tc.list, cursor)
 			}))
 			defer api.Close()
 			session := setupStdioServer(t, &config.Config{ManagementAPIKey: "key", ManagementAPIURL: api.URL})
