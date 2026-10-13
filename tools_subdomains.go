@@ -205,7 +205,7 @@ func (a *App) registerVerifySubdomainTool(_ context.Context) error {
 		Description: "Requests one DNS check for a subdomain, by id or hostname, after records are added or corrected, then reads the fresh subdomain status. Rate-limited: respect retry_after on 429. Use get_subdomain for subsequent status checks, not a verify loop. Only active permits configuring the app.",
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: utils.Ptr(false),
-			IdempotentHint:  true,
+			IdempotentHint:  false,
 			OpenWorldHint:   utils.Ptr(false),
 			ReadOnlyHint:    false,
 			Title:           "Verify Subdomain",
