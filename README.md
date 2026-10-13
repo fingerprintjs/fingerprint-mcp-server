@@ -14,7 +14,7 @@
 
 - Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
 - **Event tools**: Retrieve and search identification and Automation Intelligence (edge) events with full smart signal data
-- **Management tools**: Manage workspace environments and API keys
+- **Management tools**: Manage workspace environments, API keys and custom subdomains
 - **Skills tools**: Serve the [Fingerprint skills](https://github.com/fingerprintjs/skills) (integration guides, proxy setup, Smart Signals) to clients that cannot fetch them themselves
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
@@ -245,7 +245,7 @@ Add to your Cursor/Claude Desktop/etc configuration file (e.g. `claude_desktop_c
 
 ## Available Tools
 
-Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. With `--tools`, allow-list `list_skills`, `get_skill`, `get_skill_file` and `call_tool` for the skills to work. Write tools (create/update/delete) are hidden when `--readonly` is set or excluded via `--tools`.
+Event tools require a Server API key. Management tools require a Management API key. `get_current_time` and the skills tools need no key. `get_skill` and `get_skill_file` are not in the MCP tool list: run them through `call_tool`. With `--tools`, allow-list `list_skills`, `get_skill`, `get_skill_file` and `call_tool` for the skills to work. Write tools (create/update/delete/verify) are hidden when `--readonly` is set or excluded via `--tools`.
 
 | Tool                 | Description                                                         |
 |----------------------|---------------------------------------------------------------------|
@@ -264,6 +264,15 @@ Event tools require a Server API key. Management tools require a Management API 
 | `create_api_key`     | Create a new API key (public/secret/proxy)                          |
 | `update_api_key`     | Update an existing API key                                          |
 | `delete_api_key`     | Delete an API key (irreversible)                                    |
+| `list_subdomains`    | List custom subdomains with pagination                             |
+| `get_subdomain`      | Get a subdomain's status and DNS records                            |
+| `create_subdomain`   | Register a hostname and return the required DNS records             |
+| `verify_subdomain`   | Request one DNS check, then return the freshly read status          |
+
+For custom subdomains, follow `fingerprint-proxy-integration` through the skills tools. Creation
+does not add DNS records: the user or an authorized DNS-provider tool must add them. Configure
+the app only when the subdomain is `active`. Use `get_subdomain` for status checks after verifying;
+respect `retry_after` on rate-limit errors. Subdomain deletion and Domain Connect are not exposed.
 
 ## Available Resources
 

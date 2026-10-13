@@ -1,6 +1,7 @@
 package fpmcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -204,9 +205,31 @@ type ListToolsOutput struct {
 // target's outputSchema in tools/list; list_tools reports input schemas only.
 var proxyOutputSchema = json.RawMessage(`{"type":"object","description":"The named tool's own result, matching that tool's outputSchema in the MCP tools/list response."}`)
 
+// ToolArguments is the proxied tool's input. Models regularly send it as a
+// JSON string rather than an object, so both spellings are accepted: a string
+// is parsed again, and must then hold an object.
+type ToolArguments map[string]any
+
+func (a *ToolArguments) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var encoded string
+		if err := json.Unmarshal(trimmed, &encoded); err != nil {
+			return err
+		}
+		trimmed = []byte(encoded)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(trimmed, &object); err != nil {
+		return fmt.Errorf("arguments must be a JSON object: %w", err)
+	}
+	*a = object
+	return nil
+}
+
 type CallToolInput struct {
-	ToolName  string         `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
-	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
+	ToolName  string        `json:"tool_name" jsonschema:"Name of the tool to run, as returned by list_tools"`
+	Arguments ToolArguments `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
 }
 
 func (a *App) registerListToolsTool(_ context.Context) error {
@@ -307,8 +330,8 @@ func (a *App) registerCallToolTool(_ context.Context) error {
 }
 
 type CallWriteToolInput struct {
-	ToolName  string         `json:"tool_name" jsonschema:"Name of the state-changing tool to run, as returned by list_tools with mutating true"`
-	Arguments map[string]any `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
+	ToolName  string        `json:"tool_name" jsonschema:"Name of the state-changing tool to run, as returned by list_tools with mutating true"`
+	Arguments ToolArguments `json:"arguments,omitempty" jsonschema:"Arguments for that tool, matching the input schema from list_tools"`
 }
 
 // registerCallWriteToolTool exists because annotations are per tool. call_tool

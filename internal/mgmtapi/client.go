@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const (
@@ -53,9 +54,16 @@ func NewClient(opts ...ClientOption) *Client {
 }
 
 type APIError struct {
-	StatusCode int
-	Message    string `json:"message"`
-	Code       string `json:"code"`
+	StatusCode int         `json:"status"`
+	Message    string      `json:"message"`
+	Code       string      `json:"code,omitempty"`
+	Violations []Violation `json:"violations,omitempty"`
+	RetryAfter string      `json:"retry_after,omitempty"`
+}
+
+type Violation struct {
+	Property string `json:"property"`
+	Message  string `json:"message"`
 }
 
 func (e *APIError) Error() string {
@@ -64,8 +72,9 @@ func (e *APIError) Error() string {
 
 type apiErrorResponse struct {
 	Error struct {
-		Message string `json:"message"`
-		Code    string `json:"code"`
+		Message    string      `json:"message"`
+		Code       string      `json:"code"`
+		Violations []Violation `json:"violations,omitempty"`
 	} `json:"error"`
 }
 
@@ -125,17 +134,30 @@ func (c *Client) do(req *http.Request, out any) error {
 	}
 
 	if resp.StatusCode >= 400 {
+		redact := func(value string) string {
+			if c.apiKey == "" {
+				return value
+			}
+			return strings.ReplaceAll(value, c.apiKey, "[REDACTED]")
+		}
 		var apiErr apiErrorResponse
 		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error.Message != "" {
+			for i := range apiErr.Error.Violations {
+				apiErr.Error.Violations[i].Property = redact(apiErr.Error.Violations[i].Property)
+				apiErr.Error.Violations[i].Message = redact(apiErr.Error.Violations[i].Message)
+			}
 			return &APIError{
 				StatusCode: resp.StatusCode,
-				Message:    apiErr.Error.Message,
-				Code:       apiErr.Error.Code,
+				Message:    redact(apiErr.Error.Message),
+				Code:       redact(apiErr.Error.Code),
+				Violations: apiErr.Error.Violations,
+				RetryAfter: redact(resp.Header.Get("Retry-After")),
 			}
 		}
 		return &APIError{
 			StatusCode: resp.StatusCode,
-			Message:    string(respBody),
+			Message:    redact(string(respBody)),
+			RetryAfter: redact(resp.Header.Get("Retry-After")),
 		}
 	}
 
