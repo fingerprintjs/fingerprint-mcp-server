@@ -10,7 +10,7 @@ import (
 type SubdomainListItem struct {
 	ID        string    `json:"id" jsonschema:"Subdomain identifier"`
 	Subdomain string    `json:"subdomain" jsonschema:"Subdomain hostname"`
-	Status    string    `json:"status" jsonschema:"pending, active, timed_out or failed. Only active is ready to use"`
+	Status    string    `json:"status" jsonschema:"pending, active, timed_out, failed or expired. Only active is ready to use; expired means the certificate has expired, not that DNS is still propagating"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -23,7 +23,7 @@ type SubdomainDNSRecord struct {
 }
 
 type SubdomainDNSRecords struct {
-	Verification SubdomainDNSRecord   `json:"verification" jsonschema:"Ownership verification CNAME"`
+	Verification SubdomainDNSRecord   `json:"verification" jsonschema:"Ownership verification CNAME for older subdomains. HTTP validation returns empty host and value; do not ask the user to add that record"`
 	Routing      []SubdomainDNSRecord `json:"routing" jsonschema:"Routing A records"`
 	CAA          *SubdomainDNSRecord  `json:"caa,omitempty" jsonschema:"CAA record when required for certificate issuance"`
 }
