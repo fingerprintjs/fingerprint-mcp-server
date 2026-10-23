@@ -19,6 +19,8 @@ type Event struct {
 	// SubscriptionID is the Fingerprint subscription this event is
 	// attributed to. Required.
 	SubscriptionID string
+	// UserID is the connecting Dashboard user. Empty for older tokens.
+	UserID string
 	// Properties are arbitrary, JSON-serialisable event properties.
 	Properties map[string]any
 }

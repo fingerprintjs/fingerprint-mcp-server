@@ -20,6 +20,7 @@ type analyticsInputs struct {
 	req       mcp.Request
 	method    string
 	subID     string
+	userID    string
 	sessionID string
 
 	toolName, resourceURI, promptName string
@@ -133,6 +134,7 @@ func (a *App) emitAnalytics(in analyticsInputs) {
 	a.opts.analyticsEmitter().Emit(analytics.Event{
 		Type:           "mcp_method_called",
 		SubscriptionID: in.subID,
+		UserID:         in.userID,
 		Properties:     props,
 	})
 }

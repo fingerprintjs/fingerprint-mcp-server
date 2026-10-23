@@ -287,8 +287,10 @@ const tokenExtraServerApiKey = "server_api_key"
 const tokenExtraMgmtApiKey = "mgmt_api_key"
 const tokenExtraRegionKey = "region"
 const tokenExtraSubscriptionID = "subscription_id"
+const tokenExtraUserID = "user_id"
 
 const claimSubscriptionID = "urn:fingerprint:sub_id"
+const claimUserID = "urn:fingerprint:user_id"
 
 // parseKeysDashSeparated splits s into exactly 3 dash-separated parts
 // representing serverAPIKey, managementAPIKey, and region.
@@ -340,6 +342,9 @@ func (a *App) verifyAuthToken(_ context.Context, authToken string, _ *http.Reque
 		}
 		if subID, ok := token.Get(claimSubscriptionID); ok {
 			extra[tokenExtraSubscriptionID] = subID
+		}
+		if userID, ok := token.Get(claimUserID); ok {
+			extra[tokenExtraUserID] = userID
 		}
 
 		return &auth.TokenInfo{
@@ -719,10 +724,11 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// pipeline runs) and TokenInfo is nil in private-mode HTTP without a
 		// configured AuthToken. Guard both dereferences so the middleware
 		// doesn't panic in those paths.
-		var subID string
+		var subID, userID string
 		if extra := req.GetExtra(); extra != nil {
 			if extra.TokenInfo != nil {
 				subID, _ = extra.TokenInfo.Extra[tokenExtraSubscriptionID].(string)
+				userID, _ = extra.TokenInfo.Extra[tokenExtraUserID].(string)
 			}
 		}
 
@@ -803,6 +809,7 @@ func (a *App) loggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			req:           req,
 			method:        method,
 			subID:         subID,
+			userID:        userID,
 			sessionID:     sessionID,
 			toolName:      toolName,
 			resourceURI:   resourceURI,

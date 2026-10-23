@@ -1531,6 +1531,46 @@ func signFpjsJWTWithSubID(t *testing.T, privateKey *ecdsa.PrivateKey, subject, s
 	return string(signed)
 }
 
+func TestAnalytics_PublicMode_UserIdentity(t *testing.T) {
+	privKey, pubPEM := generateES256KeyPEM(t)
+	for _, userID := range []any{"user_first", "user_second", nil, 123} {
+		t.Run(fmt.Sprint(userID), func(t *testing.T) {
+			emitter := newRecordingEmitter()
+			ts := setupTestServerWithEmitter(t, &config.Config{
+				PublicMode: true, JwtPublicKey: pubPEM, Transport: "streamable-http",
+			}, emitter)
+			builder := jwt.NewBuilder().Issuer(fpjsJWTIssuer).
+				Subject("serverKey-managementKey-us").Expiration(time.Now().Add(time.Hour)).
+				Claim(claimSubscriptionID, "sub_shared")
+			if userID != nil {
+				builder = builder.Claim(claimUserID, userID)
+			}
+			token, err := builder.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, privKey))
+			if err != nil {
+				t.Fatal(err)
+			}
+			session := mustConnectMCPClient(t, ts.URL, string(signed))
+			if _, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+				Name: "get_current_time", Arguments: map[string]any{},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			events := emitter.snapshot()
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			wantUserID, _ := userID.(string)
+			if events[0].UserID != wantUserID || events[0].SubscriptionID != "sub_shared" {
+				t.Fatalf("unexpected identity: %+v", events[0])
+			}
+		})
+	}
+}
+
 func TestAnalytics_PublicMode_EmitsEvent(t *testing.T) {
 	fpAPI := newMockFingerprintAPI()
 	defer fpAPI.close()
