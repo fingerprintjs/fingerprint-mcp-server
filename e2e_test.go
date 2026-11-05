@@ -50,8 +50,8 @@ func TestListTools_PrivateMode_BothKeys(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 21 {
-		t.Errorf("expected 21 tools, got %d: %v", len(names), names)
+	if len(names) != 27 {
+		t.Errorf("expected 27 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -139,6 +139,7 @@ func TestListTools_PrivateMode_MgmtKeyOnly(t *testing.T) {
 		"list_environments", "create_environment", "update_environment", "delete_environment",
 		"list_api_keys", "get_api_key", "create_api_key", "update_api_key", "delete_api_key",
 		"list_subdomains", "get_subdomain", "create_subdomain", "verify_subdomain", "connect_subdomain",
+		"list_webhooks", "get_webhook", "create_webhook", "update_webhook", "verify_webhook", "delete_webhook",
 		"list_tools", "call_tool", "call_write_tool",
 	}
 	if len(names) != len(expected) {
@@ -174,7 +175,7 @@ func TestListTools_PrivateMode_ReadOnly(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	expected := []string{"get_current_time", "list_skills", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_subdomains", "get_subdomain", "list_tools", "call_tool"}
+	expected := []string{"get_current_time", "list_skills", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_subdomains", "get_subdomain", "list_webhooks", "get_webhook", "list_tools", "call_tool"}
 	if len(names) != len(expected) {
 		t.Errorf("expected %d tools, got %d: %v", len(expected), len(names), names)
 	}
@@ -270,8 +271,8 @@ func TestListTools_PublicMode(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 21 {
-		t.Errorf("expected 21 tools in public mode, got %d: %v", len(names), names)
+	if len(names) != 27 {
+		t.Errorf("expected 27 tools in public mode, got %d: %v", len(names), names)
 	}
 }
 
@@ -287,8 +288,8 @@ func TestListTools_Stdio(t *testing.T) {
 	}
 
 	names := toolNames(result)
-	if len(names) != 21 {
-		t.Errorf("expected 21 tools, got %d: %v", len(names), names)
+	if len(names) != 27 {
+		t.Errorf("expected 27 tools, got %d: %v", len(names), names)
 	}
 }
 
@@ -314,8 +315,8 @@ func TestAuth_PrivateMode_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if len(result.Tools) != 21 {
-		t.Errorf("expected 21 tools but got %d", len(result.Tools))
+	if len(result.Tools) != 27 {
+		t.Errorf("expected 27 tools but got %d", len(result.Tools))
 	}
 }
 
@@ -2369,11 +2370,11 @@ func TestListToolsTool_NamesTheProxyForEachTool(t *testing.T) {
 		listed[tool.Name] = tool
 	}
 
-	wantRead := []string{"get_current_time", "list_skills", "get_skill", "get_skill_file", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_subdomains", "get_subdomain"}
-	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key", "create_subdomain", "verify_subdomain", "connect_subdomain"}
+	wantRead := []string{"get_current_time", "list_skills", "get_skill", "get_skill_file", "get_event", "search_events", "list_environments", "list_api_keys", "get_api_key", "list_subdomains", "get_subdomain", "list_webhooks", "get_webhook"}
+	wantWrite := []string{"create_environment", "update_environment", "create_api_key", "update_api_key", "create_subdomain", "verify_subdomain", "connect_subdomain", "create_webhook", "update_webhook", "verify_webhook"}
 	// Deletes are listed but never proxied, and the proxies list themselves so a
 	// conversation whose catalog predates one can still discover it exists.
-	wantDirect := []string{"delete_environment", "delete_api_key", "list_tools", "call_tool", "call_write_tool"}
+	wantDirect := []string{"delete_environment", "delete_api_key", "delete_webhook", "list_tools", "call_tool", "call_write_tool"}
 
 	if len(out.Tools) != len(wantRead)+len(wantWrite)+len(wantDirect) {
 		t.Errorf("expected %d tools listed, got %d: %v", len(wantRead)+len(wantWrite)+len(wantDirect), len(out.Tools), toolNamesFromListing(out))

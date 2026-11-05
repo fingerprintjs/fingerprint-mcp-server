@@ -14,7 +14,7 @@
 
 - Run locally, or use the managed instance at https://mcp.fpjs.io/mcp (in Claude, add it from the [connectors directory](https://claude.ai/customize/connectors))
 - **Event tools**: Retrieve and search identification and Automation Intelligence (edge) events with full smart signal data
-- **Management tools**: Manage workspace environments, API keys and custom subdomains
+- **Management tools**: Manage workspace environments, API keys, custom subdomains and webhooks
 - **Skills tools**: Serve the [Fingerprint skills](https://github.com/fingerprintjs/skills) (integration guides, proxy setup, Smart Signals) to clients that cannot fetch them themselves
 - Supports both **stdio** and **streamable-http** transports
 - Optional HTTPS with TLS certificates
@@ -272,6 +272,12 @@ Event tools require a Server API key. Management tools require a Management API 
 | `create_subdomain`   | Register a hostname and return the required DNS records             |
 | `verify_subdomain`   | Request one DNS check, then return the freshly read status          |
 | `connect_subdomain`  | Get a Domain Connect link that adds the DNS records at the provider |
+| `list_webhooks`      | List webhooks with optional status/environment filters             |
+| `get_webhook`        | Get a webhook's URL, status, verification state and environment     |
+| `create_webhook`     | Create a webhook; returns the signing key once, if signatures are on |
+| `update_webhook`     | Update a webhook's URL, description or status                      |
+| `verify_webhook`     | Send a test event so the webhook becomes verified                  |
+| `delete_webhook`     | Delete a webhook (irreversible)                                    |
 
 For custom subdomains, follow `fingerprint-proxy-integration` through the skills tools. Creation
 does not add DNS records: when the provider supports Domain Connect, `connect_subdomain` returns a

@@ -841,6 +841,8 @@ var readOnlyTools = []string{
 	"get_api_key",
 	"list_subdomains",
 	"get_subdomain",
+	"list_webhooks",
+	"get_webhook",
 	"list_tools",
 	"call_tool",
 }
@@ -902,6 +904,12 @@ func (a *App) registerTools(ctx context.Context) error {
 			toolEntry{"create_subdomain", func() error { return a.registerCreateSubdomainTool(ctx) }},
 			toolEntry{"verify_subdomain", func() error { return a.registerVerifySubdomainTool(ctx) }},
 			toolEntry{"connect_subdomain", func() error { return a.registerConnectSubdomainTool(ctx) }},
+			toolEntry{"list_webhooks", func() error { return a.registerListWebhooksTool(ctx) }},
+			toolEntry{"get_webhook", func() error { return a.registerGetWebhookTool(ctx) }},
+			toolEntry{"create_webhook", func() error { return a.registerCreateWebhookTool(ctx) }},
+			toolEntry{"update_webhook", func() error { return a.registerUpdateWebhookTool(ctx) }},
+			toolEntry{"verify_webhook", func() error { return a.registerVerifyWebhookTool(ctx) }},
+			toolEntry{"delete_webhook", func() error { return a.registerDeleteWebhookTool(ctx) }},
 		)
 	}
 

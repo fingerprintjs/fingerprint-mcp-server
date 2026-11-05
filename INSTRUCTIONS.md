@@ -4,6 +4,7 @@ Tools and resources for the Fingerprint device intelligence platform (https://fi
 
 - **Events**: `get_event`, `search_events` cover two kinds of event. Identification events (JS Agent or mobile SDK) return `visitor_id`, browser and device details, and the full smart signal set. Automation Intelligence (edge) events return only request and IP derived fields (`ip_info`, `proxy`, `vpn`, `bot_info`, `url`, `tags`, `timestamp`) and have no `visitor_id`.
 - **Management**: `list_/get_/create_/update_/delete_environment` and `_api_key`. Write tools may be disabled — check the tool list.
+- **Webhooks**: `list_webhooks`, `get_webhook`, `create_webhook`, `update_webhook`, `verify_webhook`, `delete_webhook`. A new webhook sends no events until `verify_webhook` succeeds, and changing its URL requires verifying again. Omit `environment` on create for a global webhook; scope cannot be changed afterwards.
 - **Subdomains**: `list_subdomains`, `get_subdomain`, `create_subdomain`, `verify_subdomain`, `connect_subdomain` (Domain Connect link for one-approval DNS setup). Follow `fingerprint-proxy-integration` for DNS setup and configure the app only when status is `active`. Deletion is not exposed.
 - **Skills**: `list_skills` lists the maintained Fingerprint skills: integration guides per frontend framework and backend language, first-party deployment through a custom subdomain or proxy, Smart Signals, the Rules Engine. Load one with `get_skill` and the snippets it refers to with `get_skill_file`, both through `call_tool`.
 - **Schemas**: event, environment, and API key schemas are exposed as resources.
@@ -22,7 +23,8 @@ Tools and resources for the Fingerprint device intelligence platform (https://fi
 - Confirm with the user before running anything through `call_write_tool`.
 - Treat the event schema resource as authoritative for field questions.
 - API key types: **public** (JS Agent), **secret** (server-to-server), **management** (workspace admin), **proxy** (proxy integrations).
-- `delete_environment` / `delete_api_key` are irreversible — confirm first.
+- `delete_environment` / `delete_api_key` / `delete_webhook` are irreversible — confirm first.
+- If `create_webhook` returns `signing_key`, show it to the user immediately and tell them to store it: it is never returned again.
 
 ## Docs
 
