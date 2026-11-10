@@ -2,7 +2,6 @@ package fpmcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -123,16 +122,7 @@ func subdomainToolError(err error) (*mcp.CallToolResult, error) {
 	case http.StatusServiceUnavailable:
 		details.Message = "Custom subdomain service is unavailable. It may be temporarily unavailable or disabled for this workspace; check with Fingerprint support before retrying."
 	}
-	body, err := json.Marshal(struct {
-		Error mgmtapi.APIError `json:"error"`
-	}{Error: details})
-	if err != nil {
-		return nil, err
-	}
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: string(body)}},
-	}, nil
+	return apiErrorResult(details)
 }
 
 func (a *App) registerListSubdomainsTool(_ context.Context) error {

@@ -8,29 +8,29 @@ import (
 
 type Webhook struct {
 	// ID is the auto-generated webhook identifier.
-	ID string `json:"id"`
+	ID string `json:"id" jsonschema:"Auto-generated webhook identifier"`
 	// Description is the webhook description.
-	Description string `json:"description"`
+	Description string `json:"description" jsonschema:"Webhook description"`
 	// Status is the webhook status. Values: "enabled", "disabled".
-	Status string `json:"status"`
+	Status string `json:"status" jsonschema:"Webhook status. Values: enabled, disabled"`
 	// Verified indicates whether the webhook URL has been verified.
-	Verified bool `json:"verified"`
+	Verified bool `json:"verified" jsonschema:"Whether the endpoint has been verified. Unverified webhooks receive no events"`
 	// Environment is the associated environment. Null for workspace-scoped webhooks.
-	Environment any `json:"environment"`
+	Environment any `json:"environment" jsonschema:"Associated environment. Null for workspace-scoped (global) webhooks"`
 	// URL is the webhook endpoint URL. Must start with "https://".
-	URL string `json:"url"`
+	URL string `json:"url" jsonschema:"Webhook endpoint URL"`
 	// Legacy indicates whether this is a legacy webhook.
-	Legacy bool `json:"legacy"`
+	Legacy bool `json:"legacy" jsonschema:"Whether this is a legacy webhook"`
 	// SigningKey is the key for verifying webhook payloads. Only returned on creation.
 	SigningKey string `json:"signing_key,omitempty"`
 	// BasicAuth is the legacy basic authentication configuration.
 	BasicAuth any `json:"basic_auth"`
 	// CreatedAt is the timestamp when the webhook was created.
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"created_at" jsonschema:"Timestamp when the webhook was created"`
 	// LastEnabledAt is the timestamp when the webhook was last enabled.
-	LastEnabledAt *time.Time `json:"last_enabled_at"`
+	LastEnabledAt *time.Time `json:"last_enabled_at" jsonschema:"Timestamp when the webhook was last enabled"`
 	// LastDisabledAt is the timestamp when the webhook was last disabled.
-	LastDisabledAt *time.Time `json:"last_disabled_at"`
+	LastDisabledAt *time.Time `json:"last_disabled_at" jsonschema:"Timestamp when the webhook was last disabled"`
 }
 
 type ListWebhooksParams struct {
@@ -98,7 +98,7 @@ func (c *Client) ListWebhooks(ctx context.Context, params *ListWebhooksParams, p
 }
 
 func (c *Client) GetWebhook(ctx context.Context, id string) (*Webhook, error) {
-	req, err := c.newRequest(ctx, "GET", "/webhooks/"+id, nil, nil)
+	req, err := c.newRequest(ctx, "GET", "/webhooks/"+url.PathEscape(id), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (c *Client) CreateWebhook(ctx context.Context, input CreateWebhookRequest) 
 }
 
 func (c *Client) UpdateWebhook(ctx context.Context, id string, input UpdateWebhookRequest) (*Webhook, error) {
-	req, err := c.newRequest(ctx, "PATCH", "/webhooks/"+id, nil, input)
+	req, err := c.newRequest(ctx, "PATCH", "/webhooks/"+url.PathEscape(id), nil, input)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (c *Client) UpdateWebhook(ctx context.Context, id string, input UpdateWebho
 }
 
 func (c *Client) DeleteWebhook(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, "DELETE", "/webhooks/"+id, nil, nil)
+	req, err := c.newRequest(ctx, "DELETE", "/webhooks/"+url.PathEscape(id), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (c *Client) DeleteWebhook(ctx context.Context, id string) error {
 }
 
 func (c *Client) VerifyWebhook(ctx context.Context, id string) (*Webhook, error) {
-	req, err := c.newRequest(ctx, "POST", "/webhooks/"+id+"/verification", nil, nil)
+	req, err := c.newRequest(ctx, "POST", "/webhooks/"+url.PathEscape(id)+"/verification", nil, nil)
 	if err != nil {
 		return nil, err
 	}

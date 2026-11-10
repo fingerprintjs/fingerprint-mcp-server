@@ -2,6 +2,7 @@ package fpmcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,6 +37,22 @@ func (a *App) requireMgmtClient(req *mcp.CallToolRequest) (*mgmtapi.Client, erro
 		mgmtApiOpts = append(mgmtApiOpts, mgmtapi.WithBaseURL(a.cfg.ManagementAPIURL))
 	}
 	return mgmtapi.NewClient(mgmtApiOpts...), nil
+}
+
+// apiErrorResult reports a Management API error as a tool result, so the model
+// sees the status, code and violations instead of its client's generic failure
+// text. Each management tool family adds its own hints to details first.
+func apiErrorResult(details mgmtapi.APIError) (*mcp.CallToolResult, error) {
+	body, err := json.Marshal(struct {
+		Error mgmtapi.APIError `json:"error"`
+	}{Error: details})
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: string(body)}},
+	}, nil
 }
 
 // --- Environment tool types ---
