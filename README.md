@@ -274,7 +274,7 @@ Event tools require a Server API key. Management tools require a Management API 
 | `connect_subdomain`  | Get a Domain Connect link that adds the DNS records at the provider |
 | `list_webhooks`      | List webhooks with optional status/environment filters             |
 | `get_webhook`        | Get a webhook's URL, status, verification state and environment     |
-| `create_webhook`     | Create a webhook; returns the signing key once, if signatures are on |
+| `create_webhook`     | Create a new webhook; returns the signing key once, if signatures are on |
 | `update_webhook`     | Update a webhook's URL, description or status                      |
 | `verify_webhook`     | Send a test event so the webhook becomes verified                  |
 | `delete_webhook`     | Delete a webhook (irreversible)                                    |
